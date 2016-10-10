@@ -90,3 +90,6 @@ ENV/
 
 # Idea
 .idea/
+
+# Data
+data/
