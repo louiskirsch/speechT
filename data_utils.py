@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-
+import fnmatch
 import glob
 import os
 import soundfile as sf
@@ -71,6 +71,12 @@ def fragment_audio(audio_data, samplerate, fragment_length):
   return audio_fragments
 
 
+def iglob_recursive(directory, file_pattern):
+  for root, dir_names, file_names in os.walk(directory):
+    for filename in fnmatch.filter(file_names, file_pattern):
+      yield os.path.join(root, filename)
+
+
 class SpeechCorpusReader:
   """
   Reads and transforms the speech corpus to be used by the NN
@@ -86,7 +92,7 @@ class SpeechCorpusReader:
     :return: the created transcript
     """
     transcript_dict = dict()
-    transcript_files = glob.iglob(self._data_directory + '/**/*.trans.txt', recursive=True)
+    transcript_files = iglob_recursive(self._data_directory, '*.trans.txt')
     for transcript_file in transcript_files:
       with open(transcript_file, 'r') as f:
         for line in f:
@@ -108,7 +114,7 @@ class SpeechCorpusReader:
     :param fragment_length: the length of a input fragment in seconds
     :return: generator with (audio_fragments: ndarray, transcript: list(int)) tuples
     """
-    audio_files = list(glob.iglob(self._data_directory + '/' + directory + '/**/*.flac', recursive=True))
+    audio_files = list(iglob_recursive(self._data_directory + '/' + directory, '*.flac'))
     # Infinite stream
     while True:
       random.shuffle(audio_files)
