@@ -15,10 +15,14 @@
 import fnmatch
 import glob
 import os
+import tarfile
+import urllib.request
+
 import soundfile as sf
 import random
 import numpy as np
 import warnings
+
 
 # TODO limit to max vocabulary size
 class Vocabulary:
@@ -186,3 +190,81 @@ class BucketPicker:
           yield self._buckets
           for b in self._buckets:
             b.clear()
+
+
+class SpeechCorpusProvider:
+  """
+  Ensures the availability and downloads the speech corpus if necessary
+  """
+
+  TRAIN_DIR = 'train'
+  DEV_DIR = 'dev'
+
+  DEV_CLEAN_SET = 'dev-clean'
+  TRAIN_CLEAN_100_SET = 'train-clean-100'
+  TRAIN_CLEAN_360_SET = 'train-clean-360'
+  DATA_SETS = {
+    (DEV_DIR, DEV_CLEAN_SET),
+    (TRAIN_DIR, TRAIN_CLEAN_100_SET),
+    (TRAIN_DIR, TRAIN_CLEAN_360_SET)
+  }
+
+  BASE_URL = 'http://www.openslr.org/resources/12/'
+  SET_FILE_EXTENSION = '.tar.gz'
+  TAR_ROOT = 'LibriSpeech/'
+
+  def __init__(self, data_directory):
+    self._data_directory = data_directory
+    self._make_dir_if_not_exists(data_directory)
+    self._make_dir_if_not_exists(os.path.join(
+      data_directory, SpeechCorpusProvider.DEV_DIR))
+    self._make_dir_if_not_exists(os.path.join(
+      data_directory, SpeechCorpusProvider.TRAIN_DIR))
+
+  def _make_dir_if_not_exists(self, directory):
+    if not os.path.exists(directory):
+      os.makedirs(directory)
+
+  def _download_if_not_exists(self, remote_file_name):
+    path = os.path.join(self._data_directory, remote_file_name)
+    if not os.path.exists(path):
+      print('Downloading {}...'.format(remote_file_name))
+      urllib.request.urlretrieve(SpeechCorpusProvider.BASE_URL + remote_file_name, path)
+    return path
+
+  def _extract_from_to(self, tar_file_name, source, target_directory):
+    print('Extracting {}...'.format(tar_file_name))
+    with tarfile.open(tar_file_name, 'r:gz') as tar:
+      source_members = [
+        tarinfo for tarinfo in tar.getmembers()
+        if tarinfo.name.startswith(SpeechCorpusProvider.TAR_ROOT + source)
+      ]
+      for member in source_members:
+        # Extract without prefix
+        member.name = member.name.replace(SpeechCorpusProvider.TAR_ROOT, '')
+      tar.extractall(target_directory, source_members)
+
+  def _is_ready(self):
+    data_set_paths = [os.path.join(set_type, set_name)
+                      for set_type, set_name in SpeechCorpusProvider.DATA_SETS]
+    return all([os.path.exists(os.path.join(
+      self._data_directory, data_set
+    )) for data_set in data_set_paths])
+
+  def _download(self):
+    for data_set_type, data_set_name in SpeechCorpusProvider.DATA_SETS:
+      remote_file = data_set_name + SpeechCorpusProvider.SET_FILE_EXTENSION
+      self._download_if_not_exists(remote_file)
+
+  def _extract(self):
+    for data_set_type, data_set_name in SpeechCorpusProvider.DATA_SETS:
+      local_file = os.path.join(
+        self._data_directory, data_set_name + SpeechCorpusProvider.SET_FILE_EXTENSION)
+      target_directory = os.path.join(self._data_directory, data_set_type)
+      self._extract_from_to(local_file, data_set_name, target_directory)
+    pass
+
+  def ensure_availability(self):
+    if not self._is_ready():
+      self._download()
+      self._extract()

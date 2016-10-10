@@ -92,6 +92,10 @@ def create_model(session, forward_only):
 def train():
   """Train a speech->text model using OpenSLR data."""
 
+  # Obtain data
+  corpus_provider = data_utils.SpeechCorpusProvider(FLAGS.data_dir)
+  corpus_provider.ensure_availability()
+
   with tf.Session() as sess:
     # Create model.
     print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
@@ -101,15 +105,17 @@ def train():
     print ("Reading development and training data (limit: %d)."
            % FLAGS.max_train_data_size)
     vocabulary = data_utils.Vocabulary()
-    reader = data_utils.SpeechCorpusReader('data', vocabulary)
+    reader = data_utils.SpeechCorpusReader(FLAGS.data_dir, vocabulary)
     # TODO fragment_length depends on FLAGS.size (embedding size), keep it that way?
-    dev_set = reader.generate_samples('dev-clean', FRAGMENT_LENGTH)
-    train_set = reader.generate_samples('train-clean-100', FRAGMENT_LENGTH)
+    dev_set = reader.generate_samples(data_utils.SpeechCorpusProvider.DEV_DIR, FRAGMENT_LENGTH)
+    train_set = reader.generate_samples(data_utils.SpeechCorpusProvider.TRAIN_DIR, FRAGMENT_LENGTH)
     bucket_picker_train = data_utils.BucketPicker(train_set, _buckets, FLAGS.batch_size)
     bucket_picker_dev = data_utils.BucketPicker(dev_set, _buckets, FLAGS.batch_size)
 
     # Save vocabulary
-    vocab_filename = os.path.join(FLAGS.data_dir, 'vocabulary.bin')
+    if not os.path.exists(FLAGS.train_dir):
+      os.makedirs(FLAGS.train_dir)
+    vocab_filename = os.path.join(FLAGS.train_dir, 'vocabulary.bin')
     if not os.path.isfile(vocab_filename):
       with open(vocab_filename, 'wb') as vocab_file:
         pickle.dump(vocabulary, vocab_file)
@@ -143,8 +149,6 @@ def train():
           sess.run(model.learning_rate_decay_op)
         previous_losses.append(loss)
         # Save checkpoint and zero timer and loss.
-        if not os.path.exists(FLAGS.train_dir):
-          os.makedirs(FLAGS.train_dir)
         checkpoint_path = os.path.join(FLAGS.train_dir, "speechT.ckpt")
         model.saver.save(sess, checkpoint_path, global_step=model.global_step)
         step_time, loss = 0.0, 0.0
@@ -167,7 +171,7 @@ def decode():
     model.batch_size = 1  # We decode one sentence at a time.
 
     # Load vocabulary
-    vocab_filename = os.path.join(FLAGS.data_dir, 'vocabulary.bin')
+    vocab_filename = os.path.join(FLAGS.train_dir, 'vocabulary.bin')
     with open(vocab_filename, 'rb') as vocab_file:
       vocabulary = pickle.load(vocab_file)
 
