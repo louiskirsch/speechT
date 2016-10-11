@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 import fnmatch
-import glob
+import heapq
 import os
 import tarfile
 import urllib.request
@@ -22,9 +22,9 @@ import soundfile as sf
 import random
 import numpy as np
 import warnings
+from array import array
 
 
-# TODO limit to max vocabulary size
 class Vocabulary:
   """
   Maintains a vocabulary, i.e. a mapping from words to ids and vice-versa.
@@ -35,34 +35,150 @@ class Vocabulary:
   EOS_ID = 2
   UNK_ID = 3
 
-  def __init__(self):
+  SPECIAL_VOCABS_COUNT = 4
+
+  def __init__(self, max_size):
+    self._init_state()
+    self.max_size = max_size
+
+  def _init_state(self):
+    """
+    Recreates the vocabulary
+    """
     self._word_to_id = dict()
     self._id_to_word = dict()
-    self._counter = 4
+    self._occurrences = array('I')
+    self._counter = Vocabulary.SPECIAL_VOCABS_COUNT
 
-  def create(self, word):
+  def _create(self, word):
+    """
+    Creates a new id for the given word and save in vocabulary
+    Args:
+      word: the word to add to the vocabulary
+
+    Returns: the newly created id
+
+    """
     new_id = self._counter
     self._counter += 1
     self._word_to_id[word] = new_id
     self._id_to_word[new_id] = word
     return new_id
 
-  def retrieve_by_id(self, id):
-    return self._id_to_word[id]
+  def _get_occurrences(self, word_id):
+    """
+    Get the number of occurrences of the given word_id
+    Args:
+      word_id: the word_id to return for
+
+    Returns: the number of occurrences
+
+    """
+    return self._occurrences[word_id - Vocabulary.SPECIAL_VOCABS_COUNT]
+
+  def _create_occurrence_counter(self, initial_value=1):
+    """
+    Creates a new occurrence counter with the given initial_value
+    Args:
+      initial_value: (optional) the counter's initial value
+
+    """
+    self._occurrences.append(initial_value)
+
+  def _count_occurrence(self, word_id):
+    """
+    Increases the occurrence counter for the given word_id by one
+    Args:
+      word_id: the word_id to raise the counter for
+
+    """
+    self._occurrences[word_id - Vocabulary.SPECIAL_VOCABS_COUNT] += 1
+
+  def _size(self):
+    """
+    Returns: the vocabulary size
+
+    """
+    return self._counter
+
+  def retrieve_by_id(self, word_id):
+    """
+    Retrieves the word for the given word_id
+    Args:
+      word_id: the word_id
+
+    Returns: the word, in UPPER CASE
+
+    """
+    if word_id < 3:
+      return ''
+    if word_id == Vocabulary.UNK_ID:
+      return '?'
+    return self._id_to_word[word_id]
 
   def retrieve_by_word(self, word):
-    return self._word_to_id[word]
+    """
+    Retrieves the vocabulary's id for the given word or UNK_ID if word is not registered
+    Args:
+      word: the word to search the id for
 
-  def retrieve_or_create(self, word):
+    Returns: the word's id or UNK_ID
+
+    """
+    if word in self._word_to_id:
+      return self._word_to_id[word]
+    return Vocabulary.UNK_ID
+
+  def register_word(self, word):
+    """
+    Registers the given word in the vocabulary, raises the occurrence counter and creates it if necessary.
+    Args:
+      word: the word to register in UPPER CASE
+
+    Returns: the newly created word_id
+
+    """
     if word not in self._word_to_id:
-      return self.create(word)
-    return self.retrieve_by_word(word)
+      word_id = self._create(word)
+      self._create_occurrence_counter()
+    else:
+      word_id = self._word_to_id[word]
+      self._count_occurrence(word_id)
+    return word_id
 
   def retrieve_from_ids(self, ids):
+    """
+    Retrieve the words for a whole iterable of word ids
+    Args:
+      ids: an iterable of word ids
+
+    Returns: a list of words in UPPER CASE
+
+    """
     return [self.retrieve_by_id(i) for i in ids]
 
-  def size(self):
-    return len(self._word_to_id)
+  def trim(self):
+    """
+    Trims the vocabulary to the predetermined max_size
+
+    """
+    if self._size() > self.max_size:
+      all_ids = range(Vocabulary.SPECIAL_VOCABS_COUNT, self._size())
+      # Find the ids of the most frequent words
+      most_frequent = heapq.nlargest(self.max_size - Vocabulary.SPECIAL_VOCABS_COUNT,
+                                       all_ids,
+                                       self._get_occurrences)
+      # Save old vocabulary
+      old_id_to_word = self._id_to_word
+      old_occurrences = self._occurrences
+      # Reset vocabulary
+      self._init_state()
+      # Reinsert the most frequent words and give them new ids
+      for word_id in most_frequent:
+        word = old_id_to_word[word_id]
+        self._create(word)
+        # Restore the occurrence counter
+        self._create_occurrence_counter(old_occurrences[word_id - Vocabulary.SPECIAL_VOCABS_COUNT])
 
 
 def fragment_audio(audio_data, samplerate, fragment_length):
@@ -90,13 +206,17 @@ class SpeechCorpusReader:
     self._vocabulary = vocabulary
     self._transcript_dict = self._build_transcript()
 
-  def _build_transcript(self):
+  @staticmethod
+  def _get_transcript_entries(transcript_directory):
     """
-    Builds a transcript from transcript files, mapping from audio-id to a list of word-ids
-    :return: the created transcript
+    Iterate over all transcript lines and yield splitted entries
+    Args:
+      transcript_files: transcript files to iterate over
+
+    Returns: Iterator for all splitted entries
+
     """
-    transcript_dict = dict()
-    transcript_files = iglob_recursive(self._data_directory, '*.trans.txt')
+    transcript_files = iglob_recursive(transcript_directory, '*.trans.txt')
     for transcript_file in transcript_files:
       with open(transcript_file, 'r') as f:
         for line in f:
@@ -106,8 +226,27 @@ class SpeechCorpusReader:
           # Each line is in the form
           # 00-000000-0000 WORD1 WORD2 ...
           splitted = line.split(' ')
-          transcript_dict[splitted[0]] = \
-            [self._vocabulary.retrieve_or_create(word) for word in splitted[1:]]
+          yield splitted
+
+  def _build_transcript(self):
+    """
+    Builds a transcript from transcript files, mapping from audio-id to a list of word-ids
+    :return: the created transcript
+    """
+
+    # Register transcript words in vocabulary
+    for splitted in self._get_transcript_entries(self._data_directory):
+      for word in splitted[1:]:
+        self._vocabulary.register_word(word)
+
+    # Trim the vocabulary to max vocabulary size
+    self._vocabulary.trim()
+
+    # Create the transcript dictionary
+    transcript_dict = dict()
+    for splitted in self._get_transcript_entries(self._data_directory):
+      transcript_dict[splitted[0]] = \
+        [self._vocabulary.retrieve_by_word(word) for word in splitted[1:]]
 
     return transcript_dict
 
@@ -232,7 +371,8 @@ class SpeechCorpusProvider:
       urllib.request.urlretrieve(SpeechCorpusProvider.BASE_URL + remote_file_name, path)
     return path
 
-  def _extract_from_to(self, tar_file_name, source, target_directory):
+  @staticmethod
+  def _extract_from_to(tar_file_name, source, target_directory):
     print('Extracting {}...'.format(tar_file_name))
     with tarfile.open(tar_file_name, 'r:gz') as tar:
       source_members = [

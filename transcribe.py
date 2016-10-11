@@ -41,8 +41,6 @@ tf.app.flags.DEFINE_integer("num_layers", 3, "Number of layers in the model.")
 tf.app.flags.DEFINE_integer("vocab_size", 40000, "Vocabulary size.")
 tf.app.flags.DEFINE_string("data_dir", "/tmp", "Data directory")
 tf.app.flags.DEFINE_string("train_dir", "/tmp", "Training directory.")
-tf.app.flags.DEFINE_integer("max_train_data_size", 0,
-                            "Limit on the size of training data (0: no limit).")
 tf.app.flags.DEFINE_integer("steps_per_checkpoint", 200,
                             "How many training steps to do per checkpoint.")
 tf.app.flags.DEFINE_boolean("decode", False,
@@ -97,20 +95,19 @@ def train():
   corpus_provider.ensure_availability()
 
   with tf.Session() as sess:
-    # Create model.
-    print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
-    model = create_model(sess, False)
-
     # Read data
-    print ("Reading development and training data (limit: %d)."
-           % FLAGS.max_train_data_size)
-    vocabulary = data_utils.Vocabulary()
+    print ("Reading development and training data")
+    vocabulary = data_utils.Vocabulary(FLAGS.vocab_size)
     reader = data_utils.SpeechCorpusReader(FLAGS.data_dir, vocabulary)
     # TODO fragment_length depends on FLAGS.size (embedding size), keep it that way?
     dev_set = reader.generate_samples(data_utils.SpeechCorpusProvider.DEV_DIR, FRAGMENT_LENGTH)
     train_set = reader.generate_samples(data_utils.SpeechCorpusProvider.TRAIN_DIR, FRAGMENT_LENGTH)
     bucket_picker_train = data_utils.BucketPicker(train_set, _buckets, FLAGS.batch_size)
     bucket_picker_dev = data_utils.BucketPicker(dev_set, _buckets, FLAGS.batch_size)
+
+    # Create model.
+    print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
+    model = create_model(sess, False)
 
     # Save vocabulary
     if not os.path.exists(FLAGS.train_dir):
@@ -127,6 +124,8 @@ def train():
     step_time, loss = 0.0, 0.0
     current_step = 0
     previous_losses = []
+    print('Start training')
+    sys.stdout.flush()
     for bucket, bucket_size, bucket_id in bucket_picker_train.generate_buckets():
       # Get a batch and make a step.
       start_time = time.time()
@@ -178,11 +177,11 @@ def decode():
     while True:
       # Record audio
       sys.stdout.write("\nRecording audio... ")
-      sys.stdout.flush()
       recorder = record.AudioRecorder(rate=SAMPLERATE)
       audio_data, _ = recorder.record()
       audio_fragments = data_utils.fragment_audio(audio_data, SAMPLERATE, FRAGMENT_LENGTH)
       print('Audio recorded\n')
+      sys.stdout.flush()
 
       # Which bucket does it belong to?
       bucket_id = min([b for b in range(len(_buckets))
@@ -200,6 +199,7 @@ def decode():
         outputs = outputs[:outputs.index(data_utils.Vocabulary.EOS_ID)]
       # Print out transcribed sentence corresponding to outputs.
       print(" ".join([vocabulary.retrieve_by_id(output) for output in outputs]))
+      sys.stdout.flush()
 
 
 def self_test():
