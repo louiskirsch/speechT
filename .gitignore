@@ -93,3 +93,4 @@ ENV/
 
 # Data
 data/
+train/
