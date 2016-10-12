@@ -186,7 +186,13 @@ def decode():
 
       # Which bucket does it belong to?
       bucket_id = min([b for b in range(len(_buckets))
-                       if _buckets[b][0] > audio_fragments.shape[0]])
+                       if _buckets[b][0] > audio_fragments.shape[0]], default=None)
+
+      # Audio is too long if no bucket was found
+      if bucket_id is None:
+        print('Error: Audio too long')
+        continue
+
       # Get a 1-element batch to feed the sentence to the model.
       encoder_inputs, decoder_inputs, target_weights = model.get_batch(
         [(audio_fragments, [])], _buckets[bucket_id])
