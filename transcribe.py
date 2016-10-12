@@ -179,8 +179,9 @@ def decode():
       sys.stdout.write("\nRecording audio... ")
       recorder = record.AudioRecorder(rate=SAMPLERATE)
       audio_data, _ = recorder.record()
+      audio_data = np.array(audio_data)
       audio_fragments = data_utils.fragment_audio(audio_data, SAMPLERATE, FRAGMENT_LENGTH)
-      print('Audio recorded\n')
+      print('Audio recorded with bucket length {}\n'.format(audio_fragments.shape[0]))
       sys.stdout.flush()
 
       # Which bucket does it belong to?
@@ -188,7 +189,7 @@ def decode():
                        if _buckets[b][0] > audio_fragments.shape[0]])
       # Get a 1-element batch to feed the sentence to the model.
       encoder_inputs, decoder_inputs, target_weights = model.get_batch(
-        [(audio_fragments, [])], bucket_id)
+        [(audio_fragments, [])], _buckets[bucket_id])
       # Get output logits for the sentence.
       _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
                                        target_weights, bucket_id, True)
