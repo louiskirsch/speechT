@@ -27,6 +27,7 @@ class AudioRecorder:
     self.threshold = threshold
     self.chunk_size = chunk_size
     self.format = pyaudio.paFloat32
+    self._pyaudio = pyaudio.PyAudio()
 
   def is_silent(self, snd_data):
     "Returns 'True' if below the 'silent' threshold"
@@ -84,8 +85,7 @@ class AudioRecorder:
     blank sound to make sure VLC et al can play
     it without getting chopped off.
     """
-    p = pyaudio.PyAudio()
-    stream = p.open(format=self.format, channels=1, rate=self.rate,
+    stream = self._pyaudio.open(format=self.format, channels=1, rate=self.rate,
                     input=True, output=True,
                     frames_per_buffer=self.chunk_size)
 
@@ -111,12 +111,14 @@ class AudioRecorder:
       if snd_started and num_silent > 30:
         break
 
-    sample_width = p.get_sample_size(self.format)
+    sample_width = self._pyaudio.get_sample_size(self.format)
     stream.stop_stream()
     stream.close()
-    p.terminate()
 
     r = self.normalize(r)
     r = self.trim(r)
     r = self.add_silence(r, 0.1)
     return r, sample_width
+
+  def terminate(self):
+    self._pyaudio.terminate()

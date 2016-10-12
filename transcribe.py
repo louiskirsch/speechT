@@ -174,10 +174,11 @@ def decode():
     with open(vocab_filename, 'rb') as vocab_file:
       vocabulary = pickle.load(vocab_file)
 
+    recorder = record.AudioRecorder(rate=SAMPLERATE)
+
     while True:
       # Record audio
       sys.stdout.write("\nRecording audio... ")
-      recorder = record.AudioRecorder(rate=SAMPLERATE)
       audio_data, _ = recorder.record()
       audio_data = np.array(audio_data)
       audio_fragments = data_utils.fragment_audio(audio_data, SAMPLERATE, FRAGMENT_LENGTH)
