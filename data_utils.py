@@ -146,16 +146,16 @@ class Vocabulary:
       self._count_occurrence(word_id)
     return word_id
 
-  def retrieve_from_ids(self, ids):
+  def string_from_ids(self, ids):
     """
-    Retrieve the words for a whole iterable of word ids
+    Retrieve a single string for a whole iterable of word ids
     Args:
       ids: an iterable of word ids
 
-    Returns: a list of words in UPPER CASE
+    Returns: a string, words joined with spaces, in UPPER CASE
 
     """
-    return [self.retrieve_by_id(i) for i in ids]
+    return " ".join([self.retrieve_by_id(i) for i in ids])
 
   def trim(self):
     """
@@ -201,10 +201,10 @@ class SpeechCorpusReader:
   """
   Reads and transforms the speech corpus to be used by the NN
   """
-  def __init__(self, data_directory, vocabulary):
+  def __init__(self, data_directory, vocabulary, update_vocabulary=True):
     self._data_directory = data_directory
     self._vocabulary = vocabulary
-    self._transcript_dict = self._build_transcript()
+    self._transcript_dict = self._build_transcript(update_vocabulary)
 
   @staticmethod
   def _get_transcript_entries(transcript_directory):
@@ -228,12 +228,10 @@ class SpeechCorpusReader:
           splitted = line.split(' ')
           yield splitted
 
-  def _build_transcript(self):
+  def _update_vocabulary(self):
     """
-    Builds a transcript from transcript files, mapping from audio-id to a list of word-ids
-    :return: the created transcript
+    Extend the vocabulary by registering all words found, then trim if necessary
     """
-
     # Register transcript words in vocabulary
     for splitted in self._get_transcript_entries(self._data_directory):
       for word in splitted[1:]:
@@ -241,6 +239,14 @@ class SpeechCorpusReader:
 
     # Trim the vocabulary to max vocabulary size
     self._vocabulary.trim()
+
+  def _build_transcript(self, update_vocabulary):
+    """
+    Builds a transcript from transcript files, mapping from audio-id to a list of word-ids
+    :return: the created transcript
+    """
+    if update_vocabulary:
+      self._update_vocabulary()
 
     # Create the transcript dictionary
     transcript_dict = dict()
@@ -338,14 +344,17 @@ class SpeechCorpusProvider:
 
   TRAIN_DIR = 'train'
   DEV_DIR = 'dev'
+  TEST_DIR = 'test'
 
   DEV_CLEAN_SET = 'dev-clean'
   TRAIN_CLEAN_100_SET = 'train-clean-100'
   TRAIN_CLEAN_360_SET = 'train-clean-360'
+  TEST_CLEAN_SET = 'test-clean'
   DATA_SETS = {
     (DEV_DIR, DEV_CLEAN_SET),
     (TRAIN_DIR, TRAIN_CLEAN_100_SET),
-    (TRAIN_DIR, TRAIN_CLEAN_360_SET)
+    (TRAIN_DIR, TRAIN_CLEAN_360_SET),
+    (TEST_DIR, TEST_CLEAN_SET)
   }
 
   BASE_URL = 'http://www.openslr.org/resources/12/'
@@ -384,27 +393,32 @@ class SpeechCorpusProvider:
         member.name = member.name.replace(SpeechCorpusProvider.TAR_ROOT, '')
       tar.extractall(target_directory, source_members)
 
-  def _is_ready(self):
+  def _is_ready(self, data_sets=DATA_SETS):
     data_set_paths = [os.path.join(set_type, set_name)
-                      for set_type, set_name in SpeechCorpusProvider.DATA_SETS]
+                      for set_type, set_name in data_sets]
     return all([os.path.exists(os.path.join(
       self._data_directory, data_set
     )) for data_set in data_set_paths])
 
-  def _download(self):
-    for data_set_type, data_set_name in SpeechCorpusProvider.DATA_SETS:
+  def _download(self, data_sets=DATA_SETS):
+    for data_set_type, data_set_name in data_sets:
       remote_file = data_set_name + SpeechCorpusProvider.SET_FILE_EXTENSION
       self._download_if_not_exists(remote_file)
 
-  def _extract(self):
-    for data_set_type, data_set_name in SpeechCorpusProvider.DATA_SETS:
+  def _extract(self, data_sets=DATA_SETS):
+    for data_set_type, data_set_name in data_sets:
       local_file = os.path.join(
         self._data_directory, data_set_name + SpeechCorpusProvider.SET_FILE_EXTENSION)
       target_directory = os.path.join(self._data_directory, data_set_type)
       self._extract_from_to(local_file, data_set_name, target_directory)
     pass
 
-  def ensure_availability(self):
-    if not self._is_ready():
-      self._download()
-      self._extract()
+  def ensure_availability(self, test_only=False):
+    if test_only:
+      data_sets = [(SpeechCorpusProvider.TEST_DIR, SpeechCorpusProvider.TEST_CLEAN_SET)]
+    else:
+      data_sets = SpeechCorpusProvider.DATA_SETS
+
+    if not self._is_ready(data_sets):
+      self._download(data_sets)
+      self._extract(data_sets)

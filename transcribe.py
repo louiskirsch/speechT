@@ -45,6 +45,8 @@ tf.app.flags.DEFINE_integer("steps_per_checkpoint", 200,
                             "How many training steps to do per checkpoint.")
 tf.app.flags.DEFINE_boolean("decode", False,
                             "Set to True for interactive decoding.")
+tf.app.flags.DEFINE_boolean("decode_tests", False,
+                            "Set to True for automatic test set decoding.")
 tf.app.flags.DEFINE_boolean("self_test", False,
                             "Run a self-test if this is set to True.")
 tf.app.flags.DEFINE_boolean("use_fp16", False,
@@ -53,6 +55,7 @@ tf.app.flags.DEFINE_boolean("use_fp16", False,
 FLAGS = tf.app.flags.FLAGS
 
 SAMPLERATE = 16000
+# TODO fragment_length depends on FLAGS.size (embedding size), keep it that way?
 FRAGMENT_LENGTH = FLAGS.size / SAMPLERATE
 
 # We use a number of buckets and pad to the closest one for efficiency.
@@ -163,16 +166,47 @@ def train():
         sys.stdout.flush()
 
 
+def init_forward_session(sess):
+  # Create model and load parameters.
+  model = create_model(sess, True)
+  model.batch_size = 1  # We decode one sentence at a time.
+
+  # Load vocabulary
+  vocab_filename = os.path.join(FLAGS.train_dir, 'vocabulary.bin')
+  with open(vocab_filename, 'rb') as vocab_file:
+    vocabulary = pickle.load(vocab_file)
+
+  return model, vocabulary
+
+
+def decode_audio_fragments(audio_fragments, model, sess, vocabulary):
+  # Which bucket does it belong to?
+  bucket_id = min([b for b in range(len(_buckets))
+                   if _buckets[b][0] > audio_fragments.shape[0]], default=None)
+
+  # Audio is too long if no bucket was found
+  if bucket_id is None:
+    print('Error: Audio too long')
+    return
+
+  # Get a 1-element batch to feed the sentence to the model.
+  encoder_inputs, decoder_inputs, target_weights = model.get_batch(
+    [(audio_fragments, [])], _buckets[bucket_id])
+  # Get output logits for the sentence.
+  _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
+                                   target_weights, bucket_id, True)
+  # This is a greedy decoder - outputs are just argmaxes of output_logits.
+  outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
+  # If there is an EOS symbol in outputs, cut them at that point.
+  if data_utils.Vocabulary.EOS_ID in outputs:
+    outputs = outputs[:outputs.index(data_utils.Vocabulary.EOS_ID)]
+  # Return transcribed sentence corresponding to outputs.
+  return vocabulary.string_from_ids(outputs)
+
+
 def decode():
   with tf.Session() as sess:
-    # Create model and load parameters.
-    model = create_model(sess, True)
-    model.batch_size = 1  # We decode one sentence at a time.
-
-    # Load vocabulary
-    vocab_filename = os.path.join(FLAGS.train_dir, 'vocabulary.bin')
-    with open(vocab_filename, 'rb') as vocab_file:
-      vocabulary = pickle.load(vocab_file)
+    model, vocabulary = init_forward_session(sess)
 
     recorder = record.AudioRecorder(rate=SAMPLERATE)
 
@@ -185,30 +219,36 @@ def decode():
       print('Audio recorded with bucket length {}\n'.format(audio_fragments.shape[0]))
       sys.stdout.flush()
 
-      # Which bucket does it belong to?
-      bucket_id = min([b for b in range(len(_buckets))
-                       if _buckets[b][0] > audio_fragments.shape[0]], default=None)
-
-      # Audio is too long if no bucket was found
-      if bucket_id is None:
-        print('Error: Audio too long')
-        continue
-
-      # Get a 1-element batch to feed the sentence to the model.
-      encoder_inputs, decoder_inputs, target_weights = model.get_batch(
-        [(audio_fragments, [])], _buckets[bucket_id])
-      # Get output logits for the sentence.
-      _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs,
-                                       target_weights, bucket_id, True)
-      # This is a greedy decoder - outputs are just argmaxes of output_logits.
-      outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
-      # If there is an EOS symbol in outputs, cut them at that point.
-      if data_utils.Vocabulary.EOS_ID in outputs:
-        outputs = outputs[:outputs.index(data_utils.Vocabulary.EOS_ID)]
-      # Print out transcribed sentence corresponding to outputs.
-      print(" ".join([vocabulary.retrieve_by_id(output) for output in outputs]))
+      # Decode and print
+      result = decode_audio_fragments(audio_fragments, model, sess, vocabulary)
+      print(result)
       sys.stdout.flush()
 
+
+def decode_tests():
+  with tf.Session() as sess:
+    model, vocabulary = init_forward_session(sess)
+
+    # Obtain data
+    corpus_provider = data_utils.SpeechCorpusProvider(FLAGS.data_dir)
+    corpus_provider.ensure_availability(test_only=True)
+
+    # Read data
+    print("Reading test data")
+    reader = data_utils.SpeechCorpusReader(FLAGS.data_dir, vocabulary, update_vocabulary=False)
+    test_set = reader.generate_samples(data_utils.SpeechCorpusProvider.TEST_DIR, FRAGMENT_LENGTH, infinite=False)
+
+    for audio_fragments, expected_output in test_set:
+      expected_output = vocabulary.string_from_ids(expected_output)
+
+      # TODO Play input
+
+      # Decode and print
+      result = decode_audio_fragments(audio_fragments, model, sess, vocabulary)
+      if result is not None:
+        print('Understood: ' + result)
+        print('Expected: ' + expected_output)
+        sys.stdout.flush()
 
 def self_test():
   """Test the speechT model."""
@@ -219,6 +259,8 @@ def self_test():
 def main(_):
   if FLAGS.self_test:
     self_test()
+  elif FLAGS.decode_tests:
+    decode_tests()
   elif FLAGS.decode:
     decode()
   else:
