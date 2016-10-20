@@ -100,8 +100,14 @@ def train():
   with tf.Session() as sess:
     # Read data
     print ("Reading development and training data")
-    vocabulary = data_utils.Vocabulary(FLAGS.vocab_size)
-    reader = data_utils.SpeechCorpusReader(FLAGS.data_dir, vocabulary)
+    try:
+      vocabulary = load_vocabulary()
+      update_vocabulary = False
+      print('Loaded vocabulary from file')
+    except IOError:
+      vocabulary = data_utils.Vocabulary(FLAGS.vocab_size)
+      update_vocabulary = True
+    reader = data_utils.SpeechCorpusReader(FLAGS.data_dir, vocabulary, update_vocabulary)
     # TODO fragment_length depends on FLAGS.size (embedding size), keep it that way?
     dev_set = reader.generate_samples(data_utils.SpeechCorpusProvider.DEV_DIR, FRAGMENT_LENGTH)
     train_set = reader.generate_samples(data_utils.SpeechCorpusProvider.TRAIN_DIR, FRAGMENT_LENGTH)
@@ -166,17 +172,18 @@ def train():
         sys.stdout.flush()
 
 
+def load_vocabulary():
+  vocab_filename = os.path.join(FLAGS.train_dir, 'vocabulary.bin')
+  with open(vocab_filename, 'rb') as vocab_file:
+    vocabulary = pickle.load(vocab_file)
+  return vocabulary
+
 def init_forward_session(sess):
   # Create model and load parameters.
   model = create_model(sess, True)
   model.batch_size = 1  # We decode one sentence at a time.
 
-  # Load vocabulary
-  vocab_filename = os.path.join(FLAGS.train_dir, 'vocabulary.bin')
-  with open(vocab_filename, 'rb') as vocab_file:
-    vocabulary = pickle.load(vocab_file)
-
-  return model, vocabulary
+  return model, load_vocabulary()
 
 
 def decode_audio_fragments(audio_fragments, model, sess, vocabulary):
