@@ -271,7 +271,9 @@ class Seq2SeqModel(object):
       self.updates = []
       opt = tf.train.GradientDescentOptimizer(self.learning_rate)
       for b in range(len(buckets)):
-        gradients = tf.gradients(self.losses[b], params)
+        gradients = tf.gradients(self.losses[b],
+                                 params,
+                                 aggregation_method=tf.AggregationMethod.EXPERIMENTAL_ACCUMULATE_N)
         clipped_gradients, norm = tf.clip_by_global_norm(gradients,
                                                          max_gradient_norm)
         self.gradient_norms.append(norm)
