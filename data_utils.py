@@ -33,152 +33,48 @@ class Vocabulary:
   PAD_ID = 0
   GO_ID = 1
   EOS_ID = 2
-  UNK_ID = 3
+  REPEAT_ID = 3
+  SPACE_ID = 4
 
-  SPECIAL_VOCABS_COUNT = 4
+  SPECIAL_VOCABS_COUNT = 5
 
-  def __init__(self, max_size):
-    self._init_state()
-    self.max_size = max_size
+  A_ASCII_CODE = ord('a')
 
-  def _init_state(self):
-    """
-    Recreates the vocabulary
-    """
-    self._word_to_id = dict()
-    self._id_to_word = dict()
-    self._occurrences = array('I')
-    self._counter = Vocabulary.SPECIAL_VOCABS_COUNT
+  SIZE = ord('z') - A_ASCII_CODE + 1 + SPECIAL_VOCABS_COUNT
 
-  def _create(self, word):
-    """
-    Creates a new id for the given word and save in vocabulary
-    Args:
-      word: the word to add to the vocabulary
+  def letter_to_id(self, letter):
+    if letter == ' ':
+      return Vocabulary.SPACE_ID
+    return ord(letter) - Vocabulary.A_ASCII_CODE + Vocabulary.SPECIAL_VOCABS_COUNT
 
-    Returns: the newly created id
+  def id_to_letter(self, identifier):
+    if identifier >= Vocabulary.SPECIAL_VOCABS_COUNT:
+      return chr(identifier - Vocabulary.SPECIAL_VOCABS_COUNT + Vocabulary.A_ASCII_CODE)
+    if identifier == Vocabulary.SPACE_ID:
+      return ' '
+    return ''
 
-    """
-    new_id = self._counter
-    self._counter += 1
-    self._word_to_id[word] = new_id
-    self._id_to_word[new_id] = word
-    return new_id
+  def _sentence_to_ids_generator(self, sentence):
+    prev_letter = None
+    for letter in sentence:
+      if letter == prev_letter:
+        yield Vocabulary.REPEAT_ID
+      else:
+        yield self.letter_to_id(letter)
+      prev_letter = letter
 
-  def _get_occurrences(self, word_id):
-    """
-    Get the number of occurrences of the given word_id
-    Args:
-      word_id: the word_id to return for
+  def _ids_to_sentence_generator(self, identifiers):
+    prev_letter = None
+    for identifier in identifiers:
+      if identifier != Vocabulary.REPEAT_ID:
+        prev_letter = self.id_to_letter(identifier)
+      yield prev_letter
 
-    Returns: the number of occurrences
+  def sentence_to_ids(self, sentence):
+    return list(self._sentence_to_ids_generator(sentence.lower()))
 
-    """
-    return self._occurrences[word_id - Vocabulary.SPECIAL_VOCABS_COUNT]
-
-  def _create_occurrence_counter(self, initial_value=1):
-    """
-    Creates a new occurrence counter with the given initial_value
-    Args:
-      initial_value: (optional) the counter's initial value
-
-    """
-    self._occurrences.append(initial_value)
-
-  def _count_occurrence(self, word_id):
-    """
-    Increases the occurrence counter for the given word_id by one
-    Args:
-      word_id: the word_id to raise the counter for
-
-    """
-    self._occurrences[word_id - Vocabulary.SPECIAL_VOCABS_COUNT] += 1
-
-  def _size(self):
-    """
-    Returns: the vocabulary size
-
-    """
-    return self._counter
-
-  def retrieve_by_id(self, word_id):
-    """
-    Retrieves the word for the given word_id
-    Args:
-      word_id: the word_id
-
-    Returns: the word, in UPPER CASE
-
-    """
-    if word_id < 3:
-      return ''
-    if word_id == Vocabulary.UNK_ID:
-      return '?'
-    return self._id_to_word[word_id]
-
-  def retrieve_by_word(self, word):
-    """
-    Retrieves the vocabulary's id for the given word or UNK_ID if word is not registered
-    Args:
-      word: the word to search the id for
-
-    Returns: the word's id or UNK_ID
-
-    """
-    if word in self._word_to_id:
-      return self._word_to_id[word]
-    return Vocabulary.UNK_ID
-
-  def register_word(self, word):
-    """
-    Registers the given word in the vocabulary, raises the occurrence counter and creates it if necessary.
-    Args:
-      word: the word to register in UPPER CASE
-
-    Returns: the newly created word_id
-
-    """
-    if word not in self._word_to_id:
-      word_id = self._create(word)
-      self._create_occurrence_counter()
-    else:
-      word_id = self._word_to_id[word]
-      self._count_occurrence(word_id)
-    return word_id
-
-  def string_from_ids(self, ids):
-    """
-    Retrieve a single string for a whole iterable of word ids
-    Args:
-      ids: an iterable of word ids
-
-    Returns: a string, words joined with spaces, in UPPER CASE
-
-    """
-    return " ".join([self.retrieve_by_id(i) for i in ids])
-
-  def trim(self):
-    """
-    Trims the vocabulary to the predetermined max_size
-
-    """
-    if self._size() > self.max_size:
-      all_ids = range(Vocabulary.SPECIAL_VOCABS_COUNT, self._size())
-      # Find the ids of the most frequent words
-      most_frequent = heapq.nlargest(self.max_size - Vocabulary.SPECIAL_VOCABS_COUNT,
-                                       all_ids,
-                                       self._get_occurrences)
-      # Save old vocabulary
-      old_id_to_word = self._id_to_word
-      old_occurrences = self._occurrences
-      # Reset vocabulary
-      self._init_state()
-      # Reinsert the most frequent words and give them new ids
-      for word_id in most_frequent:
-        word = old_id_to_word[word_id]
-        self._create(word)
-        # Restore the occurrence counter
-        self._create_occurrence_counter(old_occurrences[word_id - Vocabulary.SPECIAL_VOCABS_COUNT])
+  def ids_to_sentence(self, identifiers):
+    return ''.join(self._ids_to_sentence_generator(identifiers))
 
 
 def fragment_audio(audio_data, samplerate, fragment_length):
@@ -201,10 +97,10 @@ class SpeechCorpusReader:
   """
   Reads and transforms the speech corpus to be used by the NN
   """
-  def __init__(self, data_directory, vocabulary, update_vocabulary=True):
+  def __init__(self, data_directory):
     self._data_directory = data_directory
-    self._vocabulary = vocabulary
-    self._transcript_dict = self._build_transcript(update_vocabulary)
+    self._vocabulary = Vocabulary()
+    self._transcript_dict = self._build_transcript()
 
   @staticmethod
   def _get_transcript_entries(transcript_directory):
@@ -225,34 +121,19 @@ class SpeechCorpusReader:
 
           # Each line is in the form
           # 00-000000-0000 WORD1 WORD2 ...
-          splitted = line.split(' ')
+          splitted = line.split(' ', 1)
           yield splitted
 
-  def _update_vocabulary(self):
+  def _build_transcript(self):
     """
-    Extend the vocabulary by registering all words found, then trim if necessary
-    """
-    # Register transcript words in vocabulary
-    for splitted in self._get_transcript_entries(self._data_directory):
-      for word in splitted[1:]:
-        self._vocabulary.register_word(word)
-
-    # Trim the vocabulary to max vocabulary size
-    self._vocabulary.trim()
-
-  def _build_transcript(self, update_vocabulary):
-    """
-    Builds a transcript from transcript files, mapping from audio-id to a list of word-ids
+    Builds a transcript from transcript files, mapping from audio-id to a list of vocabulary ids
     :return: the created transcript
     """
-    if update_vocabulary:
-      self._update_vocabulary()
 
     # Create the transcript dictionary
     transcript_dict = dict()
     for splitted in self._get_transcript_entries(self._data_directory):
-      transcript_dict[splitted[0]] = \
-        [self._vocabulary.retrieve_by_word(word) for word in splitted[1:]]
+      transcript_dict[splitted[0]] = self._vocabulary.sentence_to_ids(splitted[1])
 
     return transcript_dict
 
