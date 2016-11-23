@@ -22,24 +22,23 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.ops import rnn
 from tensorflow.python.ops import rnn_cell
-from tensorflow.python.ops.seq2seq import embedding_attention_decoder
+from tensorflow.python.ops.seq2seq import embedding_attention_decoder, attention_decoder
 
 from data_utils import Vocabulary
 
 
 def attention_seq2seq(encoder_inputs, decoder_inputs, cell,
-                      num_decoder_symbols, embedding_size,
-                      num_heads=1, output_projection=None,
-                      feed_previous=False, dtype=tf.float32,
+                      num_decoder_symbols,
+                      num_heads=1, feed_previous=False,
+                      dtype=tf.float32,
                       scope=None, initial_state_attention=False):
-  """Embedding sequence-to-sequence model with attention.
+  """sequence-to-sequence model with attention.
   
-  This is similar to embedding_attention_seq2seq, it does not embed the input though.
+  This is similar to embedding_attention_seq2seq, it neither embeds the input nor the output though.
 
   This model runs an RNN to encode encoder_inputs into a state vector. It keeps the outputs of this
-  RNN at every step to use for attention later. Next, it embeds decoder_inputs
-  by a newly created embedding (of shape [num_decoder_symbols x
-  input_size]). Then it runs attention decoder, initialized with the last
+  RNN at every step to use for attention later.
+  Then it runs attention decoder, initialized with the last
   encoder state, on embedded decoder_inputs and attending to encoder outputs.
 
   Args:
@@ -47,19 +46,14 @@ def attention_seq2seq(encoder_inputs, decoder_inputs, cell,
     decoder_inputs: A list of 1D int32 Tensors of shape [batch_size].
     cell: rnn_cell.RNNCell defining the cell function and size.
     num_decoder_symbols: Integer; number of symbols on the decoder side.
-    embedding_size: Integer, the length of the embedding vector for each symbol.
     num_heads: Number of attention heads that read from attention_states.
-    output_projection: None or a pair (W, B) of output projection weights and
-      biases; W has shape [output_size x num_decoder_symbols] and B has
-      shape [num_decoder_symbols]; if provided and feed_previous=True, each
-      fed previous output will first be multiplied by W and added B.
-    feed_previous: Boolean or scalar Boolean Tensor; if True, only the first
+    feed_previous: Boolean; if True, only the first
       of decoder_inputs will be used (the "GO" symbol), and all other decoder
       inputs will be taken from previous outputs (as in embedding_rnn_decoder).
       If False, decoder_inputs are used as given (the standard decoder case).
     dtype: The dtype of the initial RNN state (default: tf.float32).
     scope: VariableScope for the created subgraph; defaults to
-      "embedding_attention_seq2seq".
+      "attention_seq2seq".
     initial_state_attention: If False (default), initial attentions are zero.
       If True, initialize the attentions from the initial state and attention
       states.
@@ -82,47 +76,19 @@ def attention_seq2seq(encoder_inputs, decoder_inputs, cell,
                   for e in encoder_outputs]
     attention_states = tf.concat(1, top_states)
 
-    # Decoder.
-    output_size = None
-    if output_projection is None:
-      cell = rnn_cell.OutputProjectionWrapper(cell, num_decoder_symbols)
-      output_size = num_decoder_symbols
+    # We simply use one hot encoding for the different letters
+    decoder_inputs_encoded = [tf.one_hot(inp, num_decoder_symbols) for inp in decoder_inputs]
 
-    if isinstance(feed_previous, bool):
-      return embedding_attention_decoder(
-          decoder_inputs, encoder_state, attention_states, cell,
-          num_decoder_symbols, embedding_size, num_heads=num_heads,
-          output_size=output_size, output_projection=output_projection,
-          feed_previous=feed_previous,
-          initial_state_attention=initial_state_attention)
+    def loop(prev, _):
+      # Feed the previous output back in as input - one hot encoded (greedy decoder)
+      return tf.one_hot(tf.arg_max(prev, 1), num_decoder_symbols)
 
-    # If feed_previous is a Tensor, we construct 2 graphs and use cond.
-    def decoder(feed_previous_bool):
-      reuse = None if feed_previous_bool else True
-      with tf.variable_scope(tf.get_variable_scope(),
-                                            reuse=reuse):
-        outputs, state = embedding_attention_decoder(
-            decoder_inputs, encoder_state, attention_states, cell,
-            num_decoder_symbols, embedding_size, num_heads=num_heads,
-            output_size=output_size, output_projection=output_projection,
-            feed_previous=feed_previous_bool,
-            update_embedding_for_previous=False,
-            initial_state_attention=initial_state_attention)
-        state_list = [state]
-        if tf.nest.is_sequence(state):
-          state_list = tf.nest.flatten(state)
-        return outputs + state_list
+    loop_function = loop if feed_previous else None
 
-    outputs_and_state = tf.cond(feed_previous,
-                                                 lambda: decoder(True),
-                                                 lambda: decoder(False))
-    outputs_len = len(decoder_inputs)  # Outputs length same as decoder inputs.
-    state_list = outputs_and_state[outputs_len:]
-    state = state_list[0]
-    if tf.nest.is_sequence(encoder_state):
-      state = tf.nest.pack_sequence_as(structure=encoder_state,
-                                       flat_sequence=state_list)
-    return outputs_and_state[:outputs_len], state
+    return attention_decoder(
+        decoder_inputs_encoded, encoder_state, attention_states, cell,
+        num_decoder_symbols, num_heads=num_heads, loop_function=loop_function,
+        initial_state_attention=initial_state_attention)
 
 
 class Seq2SeqModel(object):
@@ -150,7 +116,6 @@ class Seq2SeqModel(object):
                learning_rate,
                learning_rate_decay_factor,
                use_lstm=False,
-               num_samples=512,
                forward_only=False,
                dtype=tf.float32):
     """Create the model.
@@ -171,7 +136,6 @@ class Seq2SeqModel(object):
       learning_rate: learning rate to start with.
       learning_rate_decay_factor: decay learning rate by this much when needed.
       use_lstm: if true, we use LSTM cells instead of GRU cells.
-      num_samples: number of samples for sampled softmax.
       forward_only: if set, we do not construct the backward pass in the model.
       dtype: the data type to use to store internal variables.
     """
@@ -183,29 +147,6 @@ class Seq2SeqModel(object):
     self.learning_rate_decay_op = self.learning_rate.assign(
         self.learning_rate * learning_rate_decay_factor)
     self.global_step = tf.Variable(0, trainable=False)
-
-    # If we use sampled softmax, we need an output projection.
-    output_projection = None
-    softmax_loss_function = None
-    # Sampled softmax only makes sense if we sample less than vocabulary size.
-    if num_samples > 0 and num_samples < self.target_vocab_size:
-      w_t = tf.get_variable("proj_w", [self.target_vocab_size, size], dtype=dtype)
-      w = tf.transpose(w_t)
-      b = tf.get_variable("proj_b", [self.target_vocab_size], dtype=dtype)
-      output_projection = (w, b)
-
-      def sampled_loss(inputs, labels):
-        labels = tf.reshape(labels, [-1, 1])
-        # We need to compute the sampled_softmax_loss using 32bit floats to
-        # avoid numerical instabilities.
-        local_w_t = tf.cast(w_t, tf.float32)
-        local_b = tf.cast(b, tf.float32)
-        local_inputs = tf.cast(inputs, tf.float32)
-        return tf.cast(
-            tf.nn.sampled_softmax_loss(local_w_t, local_b, local_inputs, labels,
-                                       num_samples, self.target_vocab_size),
-            dtype)
-      softmax_loss_function = sampled_loss
 
     # Create the internal multi-layer cell for our RNN.
     single_cell = tf.nn.rnn_cell.GRUCell(size)
@@ -221,10 +162,8 @@ class Seq2SeqModel(object):
           encoder_inputs,
           decoder_inputs,
           cell,
-          num_decoder_symbols=target_vocab_size,
-          embedding_size=size,
-          output_projection=output_projection,
           feed_previous=do_decode,
+          num_decoder_symbols=target_vocab_size,
           dtype=dtype)
 
     # Feeds for inputs.
@@ -248,21 +187,11 @@ class Seq2SeqModel(object):
     if forward_only:
       self.outputs, self.losses = tf.nn.seq2seq.model_with_buckets(
           self.encoder_inputs, self.decoder_inputs, targets,
-          self.target_weights, buckets, lambda x, y: seq2seq_f(x, y, True),
-          softmax_loss_function=softmax_loss_function)
-      # If we use output projection, we need to project outputs for decoding.
-      if output_projection is not None:
-        for b in range(len(buckets)):
-          self.outputs[b] = [
-              tf.matmul(output, output_projection[0]) + output_projection[1]
-              for output in self.outputs[b]
-          ]
+          self.target_weights, buckets, lambda x, y: seq2seq_f(x, y, True))
     else:
       self.outputs, self.losses = tf.nn.seq2seq.model_with_buckets(
           self.encoder_inputs, self.decoder_inputs, targets,
-          self.target_weights, buckets,
-          lambda x, y: seq2seq_f(x, y, False),
-          softmax_loss_function=softmax_loss_function)
+          self.target_weights, buckets, lambda x, y: seq2seq_f(x, y, False))
 
     # Gradients and SGD update operation for training the model.
     params = tf.trainable_variables()

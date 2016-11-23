@@ -38,7 +38,6 @@ tf.app.flags.DEFINE_integer("batch_size", 64,
                             "Batch size to use during training.")
 tf.app.flags.DEFINE_integer("size", 1024, "Size of each model layer.")
 tf.app.flags.DEFINE_integer("num_layers", 3, "Number of layers in the model.")
-tf.app.flags.DEFINE_integer("vocab_size", 40000, "Vocabulary size.")
 tf.app.flags.DEFINE_string("data_dir", "data/", "Data directory")
 tf.app.flags.DEFINE_string("train_dir", "train/", "Training directory.")
 tf.app.flags.DEFINE_integer("steps_per_checkpoint", 200,
@@ -60,7 +59,7 @@ FRAGMENT_LENGTH = FLAGS.size / SAMPLERATE
 
 # We use a number of buckets and pad to the closest one for efficiency.
 # See seq2seq_model.Seq2SeqModel for details of how they work.
-_buckets = [(125, 30), (190, 42), (220, 50), (278, 62)]
+_buckets = [(125, 180), (190, 250), (220, 300), (278, 370)]
 
 # Adapt buckets to FLAGS.size
 for i, bucket in enumerate(_buckets):
@@ -70,7 +69,7 @@ def create_model(session, forward_only):
   """Create speechT model and initialize or load parameters in session."""
   dtype = tf.float16 if FLAGS.use_fp16 else tf.float32
   model = seq2seq_model.Seq2SeqModel(
-      FLAGS.vocab_size,
+      data_utils.Vocabulary.SIZE,
       _buckets,
       FLAGS.size,
       FLAGS.num_layers,
@@ -100,14 +99,7 @@ def train():
   with tf.Session() as sess:
     # Read data
     print ("Reading development and training data")
-    try:
-      vocabulary = load_vocabulary()
-      update_vocabulary = False
-      print('Loaded vocabulary from file')
-    except IOError:
-      vocabulary = data_utils.Vocabulary(FLAGS.vocab_size)
-      update_vocabulary = True
-    reader = data_utils.SpeechCorpusReader(FLAGS.data_dir, vocabulary, update_vocabulary)
+    reader = data_utils.SpeechCorpusReader(FLAGS.data_dir)
     # TODO fragment_length depends on FLAGS.size (embedding size), keep it that way?
     dev_set = reader.generate_samples(data_utils.SpeechCorpusProvider.DEV_DIR, FRAGMENT_LENGTH)
     train_set = reader.generate_samples(data_utils.SpeechCorpusProvider.TRAIN_DIR, FRAGMENT_LENGTH)
@@ -117,14 +109,6 @@ def train():
     # Create model.
     print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
     model = create_model(sess, False)
-
-    # Save vocabulary
-    if not os.path.exists(FLAGS.train_dir):
-      os.makedirs(FLAGS.train_dir)
-    vocab_filename = os.path.join(FLAGS.train_dir, 'vocabulary.bin')
-    if not os.path.isfile(vocab_filename):
-      with open(vocab_filename, 'wb') as vocab_file:
-        pickle.dump(vocabulary, vocab_file)
 
     # Create a bucket batch generator, yielding buckets of each type at a time
     bucket_batch_dev = bucket_picker_dev.generate_all_buckets()
@@ -172,18 +156,12 @@ def train():
         sys.stdout.flush()
 
 
-def load_vocabulary():
-  vocab_filename = os.path.join(FLAGS.train_dir, 'vocabulary.bin')
-  with open(vocab_filename, 'rb') as vocab_file:
-    vocabulary = pickle.load(vocab_file)
-  return vocabulary
-
 def init_forward_session(sess):
   # Create model and load parameters.
   model = create_model(sess, True)
   model.batch_size = 1  # We decode one sentence at a time.
 
-  return model, load_vocabulary()
+  return model
 
 
 def decode_audio_fragments(audio_fragments, model, sess, vocabulary):
@@ -208,12 +186,13 @@ def decode_audio_fragments(audio_fragments, model, sess, vocabulary):
   if data_utils.Vocabulary.EOS_ID in outputs:
     outputs = outputs[:outputs.index(data_utils.Vocabulary.EOS_ID)]
   # Return transcribed sentence corresponding to outputs.
-  return vocabulary.string_from_ids(outputs)
+  return vocabulary.ids_to_sentence(outputs)
 
 
 def decode():
   with tf.Session() as sess:
-    model, vocabulary = init_forward_session(sess)
+    model = init_forward_session(sess)
+    vocabulary = data_utils.Vocabulary()
 
     recorder = record.AudioRecorder(rate=SAMPLERATE)
 
@@ -234,7 +213,8 @@ def decode():
 
 def decode_tests():
   with tf.Session() as sess:
-    model, vocabulary = init_forward_session(sess)
+    model = init_forward_session(sess)
+    vocabulary = data_utils.Vocabulary()
 
     # Obtain data
     corpus_provider = data_utils.SpeechCorpusProvider(FLAGS.data_dir)
@@ -242,11 +222,11 @@ def decode_tests():
 
     # Read data
     print("Reading test data")
-    reader = data_utils.SpeechCorpusReader(FLAGS.data_dir, vocabulary, update_vocabulary=False)
+    reader = data_utils.SpeechCorpusReader(FLAGS.data_dir)
     test_set = reader.generate_samples(data_utils.SpeechCorpusProvider.TEST_DIR, FRAGMENT_LENGTH, infinite=False)
 
     for audio_fragments, expected_output in test_set:
-      expected_output = vocabulary.string_from_ids(expected_output)
+      expected_output = vocabulary.ids_to_sentence(expected_output)
 
       # TODO Play input
 
@@ -259,7 +239,7 @@ def decode_tests():
 
 def self_test():
   """Test the speechT model."""
-  # TODO implement
+  # TODO create simple model, test functionality
   pass
 
 
