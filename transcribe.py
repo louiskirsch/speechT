@@ -110,6 +110,10 @@ def train():
     print("Creating %d layers of %d units." % (FLAGS.num_layers, FLAGS.size))
     model = create_model(sess, False)
 
+    # Create training directory if it does not exist
+    if not os.path.exists(FLAGS.train_dir):
+      os.makedirs(FLAGS.train_dir)
+
     # Create a bucket batch generator, yielding buckets of each type at a time
     bucket_batch_dev = bucket_picker_dev.generate_all_buckets()
 
