@@ -36,7 +36,7 @@ tf.app.flags.DEFINE_float("max_gradient_norm", 5.0,
                           "Clip gradients to this norm.")
 tf.app.flags.DEFINE_integer("batch_size", 64,
                             "Batch size to use during training.")
-tf.app.flags.DEFINE_integer("size", 1024, "Size of each model layer.")
+tf.app.flags.DEFINE_integer("size", 256, "Size of each model layer.")
 tf.app.flags.DEFINE_integer("num_layers", 3, "Number of layers in the model.")
 tf.app.flags.DEFINE_string("data_dir", "data/", "Data directory")
 tf.app.flags.DEFINE_string("train_dir", "train/", "Training directory.")
@@ -54,12 +54,10 @@ tf.app.flags.DEFINE_boolean("use_fp16", False,
 FLAGS = tf.app.flags.FLAGS
 
 SAMPLERATE = 16000
-# TODO fragment_length depends on FLAGS.size (embedding size), keep it that way?
-FRAGMENT_LENGTH = FLAGS.size / SAMPLERATE
 
 # We use a number of buckets and pad to the closest one for efficiency.
 # See seq2seq_model.Seq2SeqModel for details of how they work.
-_buckets = [(125, 180), (190, 250), (220, 300), (278, 370)]
+_buckets = [(375, 180), (570, 250), (650, 300), (770, 350)]
 
 # Adapt buckets to FLAGS.size
 for i, bucket in enumerate(_buckets):
@@ -101,8 +99,8 @@ def train():
     print ("Reading development and training data")
     reader = data_utils.SpeechCorpusReader(FLAGS.data_dir)
     # TODO fragment_length depends on FLAGS.size (embedding size), keep it that way?
-    dev_set = reader.generate_samples(data_utils.SpeechCorpusProvider.DEV_DIR, FRAGMENT_LENGTH)
-    train_set = reader.generate_samples(data_utils.SpeechCorpusProvider.TRAIN_DIR, FRAGMENT_LENGTH)
+    dev_set = reader.generate_samples(data_utils.SpeechCorpusProvider.DEV_DIR, FLAGS.size)
+    train_set = reader.generate_samples(data_utils.SpeechCorpusProvider.TRAIN_DIR, FLAGS.size)
     bucket_picker_train = data_utils.BucketPicker(train_set, _buckets, FLAGS.batch_size)
     bucket_picker_dev = data_utils.BucketPicker(dev_set, _buckets, FLAGS.batch_size)
 
@@ -205,7 +203,7 @@ def decode():
       sys.stdout.write("\nRecording audio... ")
       audio_data, _ = recorder.record()
       audio_data = np.array(audio_data)
-      audio_fragments = data_utils.fragment_audio(audio_data, SAMPLERATE, FRAGMENT_LENGTH)
+      audio_fragments = data_utils.fragment_audio(audio_data, SAMPLERATE, FLAGS.size)
       print('Audio recorded with bucket length {}\n'.format(audio_fragments.shape[0]))
       sys.stdout.flush()
 
@@ -227,7 +225,7 @@ def decode_tests():
     # Read data
     print("Reading test data")
     reader = data_utils.SpeechCorpusReader(FLAGS.data_dir)
-    test_set = reader.generate_samples(data_utils.SpeechCorpusProvider.TEST_DIR, FRAGMENT_LENGTH, infinite=False)
+    test_set = reader.generate_samples(data_utils.SpeechCorpusProvider.TEST_DIR, FLAGS.size, infinite=False)
 
     for audio_fragments, expected_output in test_set:
       expected_output = vocabulary.ids_to_sentence(expected_output)

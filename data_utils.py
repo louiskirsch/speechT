@@ -18,7 +18,7 @@ import os
 import tarfile
 import urllib.request
 
-import soundfile as sf
+import librosa
 import random
 import numpy as np
 import warnings
@@ -77,14 +77,12 @@ class Vocabulary:
     return ''.join(self._ids_to_sentence_generator(identifiers))
 
 
-def fragment_audio(audio_data, samplerate, fragment_length):
-  # Pad the audio data to allow for splitting into multiple fragments
-  fragment_size = (int)(samplerate * fragment_length)
-  pad_size = fragment_size - (audio_data.shape[0] % fragment_size)
-  audio_data = np.lib.pad(audio_data, (0, pad_size), 'constant')
-  # Split into multiple fragments
-  audio_fragments = np.reshape(audio_data, (-1, fragment_size))
-  return audio_fragments
+def calc_spectrogram(audio_data, samplerate, number_mels):
+  S = librosa.feature.melspectrogram(audio_data, sr=samplerate, n_mels=number_mels)
+
+  # Convert to log scale (dB). We'll use the peak power as reference.
+  log_S = librosa.logamplitude(S, ref_power=np.max)
+  return log_S.T
 
 
 def iglob_recursive(directory, file_pattern):
@@ -137,7 +135,7 @@ class SpeechCorpusReader:
 
     return transcript_dict
 
-  def generate_samples(self, directory, fragment_length=0.02, infinite=True):
+  def generate_samples(self, directory, number_mels, infinite=True):
     """
     Generates samples from the given directory in random order
     :param directory: the sub-directory of the initial data directory to sample from
@@ -149,8 +147,8 @@ class SpeechCorpusReader:
     while True:
       random.shuffle(audio_files)
       for audio_file in audio_files:
-        audio_data, samplerate = sf.read(audio_file, dtype='float32')
-        audio_fragments = fragment_audio(audio_data, samplerate, fragment_length)
+        audio_data, samplerate = librosa.load(audio_file)
+        audio_fragments = calc_spectrogram(audio_data, samplerate, number_mels)
 
         file_name = os.path.basename(audio_file)
         audio_id = os.path.splitext(file_name)[0]
