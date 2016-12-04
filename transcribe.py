@@ -59,10 +59,6 @@ SAMPLERATE = 16000
 # See seq2seq_model.Seq2SeqModel for details of how they work.
 _buckets = [(375, 180), (570, 250), (650, 300), (770, 350)]
 
-# Adapt buckets to FLAGS.size
-for i, bucket in enumerate(_buckets):
-  _buckets[i] = ((int)(bucket[0] * 1024 / FLAGS.size), bucket[1])
-
 def create_model(session, forward_only):
   """Create speechT model and initialize or load parameters in session."""
   dtype = tf.float16 if FLAGS.use_fp16 else tf.float32
