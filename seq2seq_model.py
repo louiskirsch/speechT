@@ -77,11 +77,11 @@ def attention_seq2seq(encoder_inputs, decoder_inputs, cell,
     attention_states = tf.concat(1, top_states)
 
     # We simply use one hot encoding for the different letters
-    decoder_inputs_encoded = [tf.one_hot(inp, num_decoder_symbols) for inp in decoder_inputs]
+    decoder_inputs_encoded = [tf.one_hot(inp, num_decoder_symbols, axis=-1) for inp in decoder_inputs]
 
     def loop(prev, _):
       # Feed the previous output back in as input - one hot encoded (greedy decoder)
-      return tf.one_hot(tf.arg_max(prev, 1), num_decoder_symbols)
+      return tf.one_hot(tf.arg_max(prev, 1), num_decoder_symbols, axis=-1)
 
     loop_function = loop if feed_previous else None
 
