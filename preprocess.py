@@ -121,20 +121,23 @@ class SpeechCorpusReader:
     for audio_id, audio_fragments, transcript in self.generate_samples(directory, number_mels):
       np.savez(out_directory + '/' + audio_id, audio_fragments=audio_fragments, transcript=transcript)
 
-  def load_samples(self, directory, max_size):
+  def load_samples(self, directory, max_size, loop_infinitely=False):
 
     load_directory = self._data_directory + '/preprocessed/' + directory
 
     files = list(iglob_recursive(load_directory, '*.npz'))
-    random.shuffle(files)
 
-    for file in files:
-      with np.load(file) as data:
-        audio_length = data['audio_fragments'].shape[0]
-        if audio_length <= max_size:
-          yield data['audio_fragments'], data['transcript']
-        else:
-          logging.warning('Audio snippet too long: {}'.format(audio_length))
+    while True:
+      random.shuffle(files)
+      for file in files:
+        with np.load(file) as data:
+          audio_length = data['audio_fragments'].shape[0]
+          if audio_length <= max_size:
+            yield data['audio_fragments'], data['transcript']
+          else:
+            logging.warning('Audio snippet too long: {}'.format(audio_length))
+      if not loop_infinitely:
+        break
 
 
 if __name__ == '__main__':
