@@ -50,12 +50,28 @@ class Wav2LetterModel:
     outputs = tf.concat(2, outputs)  # of size [batch_size, max_time, 2 * hidden_size]
 
     # Linear projection after LSTM output
-    weights = tf.Variable(tf.random_normal([2 * hidden_size, num_classes]))
-    biases = tf.Variable(tf.random_normal([num_classes]))
-    logits_per_output_list = []
+    def create_fully_connected_variables(scope_name, output_size):
+      with tf.variable_scope(scope_name) as scope:
+        tf.get_variable('weights', initializer=tf.random_normal([2 * hidden_size, output_size]))
+        tf.get_variable('biases', initializer=tf.random_normal([output_size]))
+
+    def fully_connected(scope_name, prev_output, use_relu):
+      with tf.variable_scope(scope_name, reuse=True):
+        weights = tf.get_variable('weights')
+        biases = tf.get_variable('biases')
+        out = tf.matmul(prev_output, weights) + biases
+        if use_relu:
+          return tf.nn.relu(out)
+        return out
+
+    create_fully_connected_variables('hidden_layer', 2 * hidden_size)
+    create_fully_connected_variables('logits_layer', num_classes)
+
     # iterate outputs and project linearly of size [batch_size, 2 * hidden_size]
+    logits_per_output_list = []
     for output in tf.unpack(tf.transpose(outputs, (1, 0, 2))):
-      logits_per_output_list.append(tf.matmul(output, weights) + biases)
+      hidden_layer = fully_connected('hidden_layer', output, True)
+      logits_per_output_list.append(fully_connected('logits_layer', hidden_layer, True))
     # repack logits to size [max_time, batch_size, 2 * hidden_size]
     logits = tf.pack(logits_per_output_list, 0)
 
