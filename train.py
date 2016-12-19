@@ -48,8 +48,7 @@ def train():
       return zip(*args)
 
     for sample_batch in batch(reader.load_samples('train', MAX_TIME), FLAGS.batch_size):
-      input_list = [sample[0] for sample in sample_batch]
-      label_list = [sample[1] for sample in sample_batch]
+      input_list, label_list = zip(*sample_batch)
 
       print('First sample')
       print(input_list[0])
