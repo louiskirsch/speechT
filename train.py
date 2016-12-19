@@ -50,10 +50,6 @@ def train():
     for sample_batch in batch(reader.load_samples('train', MAX_TIME), FLAGS.batch_size):
       input_list, label_list = zip(*sample_batch)
 
-      print('First sample')
-      print(input_list[0])
-      print(label_list[0])
-
       _, loss = model.step(sess, input_list, label_list)
       perplexity = tf.math.exp(float(loss)) if loss < 300 else float("inf")
       print('Average loss: {:.2f}; Perplexity: {:.2f}'.format(loss, perplexity))
