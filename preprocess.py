@@ -121,11 +121,14 @@ class SpeechCorpusReader:
     for audio_id, audio_fragments, transcript in self.generate_samples(directory, number_mels):
       np.savez(out_directory + '/' + audio_id, audio_fragments=audio_fragments, transcript=transcript)
 
-  def load_samples(self, directory, max_size, loop_infinitely=False):
+  def load_samples(self, directory, max_size, loop_infinitely=False, limit_count=0):
 
     load_directory = self._data_directory + '/preprocessed/' + directory
 
     files = list(iglob_recursive(load_directory, '*.npz'))
+
+    if limit_count:
+      files = files[:limit_count]
 
     while True:
       random.shuffle(files)
