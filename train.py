@@ -47,7 +47,9 @@ def train():
       args = [iter(iterable)] * batch_size
       return zip(*args)
 
-    for sample_batch in batch(reader.load_samples('train', MAX_TIME), FLAGS.batch_size):
+    sample_generator = reader.load_samples('train', MAX_TIME)
+
+    for sample_batch in batch(sample_generator, FLAGS.batch_size):
       input_list, label_list = zip(*sample_batch)
 
       _, loss = model.step(sess, input_list, label_list)
