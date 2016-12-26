@@ -23,11 +23,6 @@ class Wav2LetterModel:
                hidden_size, learning_rate, max_gradient_norm, num_layers):
     self.max_time = max_time
     self.input_size = input_size
-    self._setup(max_time, input_size, num_classes,
-                hidden_size, learning_rate, max_gradient_norm, num_layers)
-
-  def _setup(self, max_time, input_size, num_classes,
-             hidden_size, learning_rate, max_gradient_norm, num_layers):
 
     # Define input placeholders
     self.inputs = tf.placeholder(tf.float32, [None, max_time, input_size], name='inputs')
