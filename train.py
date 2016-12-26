@@ -22,21 +22,17 @@ tf.app.flags.DEFINE_float("learning_rate", 0.5, "Learning rate.")
 tf.app.flags.DEFINE_float("max_gradient_norm", 5.0, "Clip gradients to this norm.")
 tf.app.flags.DEFINE_integer("batch_size", 64,
                             "Batch size to use during training.")
-tf.app.flags.DEFINE_integer("size", 256, "Size of each model layer.")
-tf.app.flags.DEFINE_integer("num_layers", 3, "Number of layers in the model.")
 tf.app.flags.DEFINE_string("data_dir", "data/", "Data directory")
 
 FLAGS = tf.app.flags.FLAGS
 
 # TODO what's the right value? set it as parameter?
-MAX_TIME = 1000
-N_MEL = 128
+N_COEFFICIENTS = 13
 
 
 def train():
-  model = Wav2LetterModel(MAX_TIME, N_MEL, vocabulary.SIZE + 1,
-                          FLAGS.size, FLAGS.learning_rate, FLAGS.max_gradient_norm,
-                          FLAGS.num_layers)
+  model = Wav2LetterModel(N_COEFFICIENTS, vocabulary.SIZE + 1,
+                          FLAGS.learning_rate, FLAGS.max_gradient_norm)
 
   with tf.Session() as sess:
     model.init_session(sess)
@@ -47,7 +43,7 @@ def train():
       args = [iter(iterable)] * batch_size
       return zip(*args)
 
-    sample_generator = reader.load_samples('train', MAX_TIME)
+    sample_generator = reader.load_samples('train', loop_infinitely=True)
 
     for sample_batch in batch(sample_generator, FLAGS.batch_size):
       input_list, label_list = zip(*sample_batch)

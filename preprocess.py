@@ -25,14 +25,12 @@ import corpus
 import argparse
 
 
-def calc_spectrogram(audio_data, samplerate, number_mels):
-  spectrogram = librosa.feature.melspectrogram(audio_data, sr=samplerate, n_mels=number_mels)
+def calc_spectrogram(audio_data, samplerate, n_mfcc=13, n_fft=400, hop_length=160):
+  mfcc = librosa.feature.mfcc(audio_data, sr=samplerate, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length)
 
-  # Convert to log scale (dB). We'll use the peak power as reference.
-  # TODO why do we do this?
-  log_spectrogram = librosa.logamplitude(spectrogram, ref_power=np.max)
+  # TODO do we need to normalize to mean 0 and std 1 ?
 
-  return log_spectrogram.T
+  return mfcc.T
 
 
 def iglob_recursive(directory, file_pattern):
@@ -90,11 +88,10 @@ class SpeechCorpusReader:
 
     return transcript_dict
 
-  def generate_samples(self, directory, number_mels):
+  def generate_samples(self, directory):
     """
     Generates samples from the given directory
     :param directory: the sub-directory of the initial data directory to sample from
-    :param number_mels: the parameter number_mels to use for the spectrogram
     :return: generator with (audio_fragments: ndarray, transcript: list(int)) tuples
     """
     audio_files = list(iglob_recursive(self._data_directory + '/' + directory, '*.flac'))
@@ -103,7 +100,7 @@ class SpeechCorpusReader:
 
     for audio_file in audio_files:
       audio_data, samplerate = librosa.load(audio_file)
-      audio_fragments = calc_spectrogram(audio_data, samplerate, number_mels)
+      audio_fragments = calc_spectrogram(audio_data, samplerate)
 
       file_name = os.path.basename(audio_file)
       audio_id = os.path.splitext(file_name)[0]
@@ -112,16 +109,16 @@ class SpeechCorpusReader:
 
       yield audio_id, audio_fragments, transcript
 
-  def store_samples(self, directory, number_mels):
+  def store_samples(self, directory):
 
     out_directory = self._data_directory + '/preprocessed/' + directory
     if not os.path.exists(out_directory):
       os.makedirs(out_directory)
 
-    for audio_id, audio_fragments, transcript in self.generate_samples(directory, number_mels):
+    for audio_id, audio_fragments, transcript in self.generate_samples(directory):
       np.savez(out_directory + '/' + audio_id, audio_fragments=audio_fragments, transcript=transcript)
 
-  def load_samples(self, directory, max_size, loop_infinitely=False, limit_count=0):
+  def load_samples(self, directory, max_size=False, loop_infinitely=False, limit_count=0):
 
     load_directory = self._data_directory + '/preprocessed/' + directory
 
@@ -135,7 +132,7 @@ class SpeechCorpusReader:
       for file in files:
         with np.load(file) as data:
           audio_length = data['audio_fragments'].shape[0]
-          if audio_length <= max_size:
+          if not max_size or audio_length <= max_size:
             yield data['audio_fragments'], data['transcript']
           else:
             logging.warning('Audio snippet too long: {}'.format(audio_length))
@@ -148,8 +145,6 @@ if __name__ == '__main__':
     description='Generate preprocessed file from audio files and transcripts')
   parser.add_argument('--data_directory', type=str, required=False, default='data',
                       help='the data directory to pull the files from and store the preprocessed file')
-  parser.add_argument('--number_mels', type=int, required=False, default=128,
-                      help='number of mels to be generated')
   args = parser.parse_args()
 
   corpus = corpus.SpeechCorpusProvider(args.data_directory)
@@ -157,10 +152,10 @@ if __name__ == '__main__':
   corpus_reader = SpeechCorpusReader(args.data_directory)
 
   print('Preprocessing training data')
-  corpus_reader.store_samples('train', args.number_mels)
+  corpus_reader.store_samples('train')
 
   print('Preprocessing test data')
-  corpus_reader.store_samples('test', args.number_mels)
+  corpus_reader.store_samples('test')
 
   print('Preprocessing development data')
-  corpus_reader.store_samples('dev', args.number_mels)
+  corpus_reader.store_samples('dev')

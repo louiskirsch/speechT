@@ -19,59 +19,43 @@ import numpy as np
 
 class Wav2LetterModel:
 
-  def __init__(self, max_time, input_size, num_classes,
-               hidden_size, learning_rate, max_gradient_norm, num_layers):
-    self.max_time = max_time
+  def __init__(self, input_size, num_classes,
+               learning_rate, max_gradient_norm):
     self.input_size = input_size
 
     # Define input placeholders
-    self.inputs = tf.placeholder(tf.float32, [None, max_time, input_size], name='inputs')
+    self.inputs = tf.placeholder(tf.float32, [None, None, input_size], name='inputs')
     self.sequence_lengths = tf.placeholder(tf.int32, [None], name='sequence_lengths')
     self.labels = tf.sparse_placeholder(tf.int32, name='labels')
 
-    # Create RNN cells
-    def create_cell():
-      cell = tf.nn.rnn_cell.LSTMCell(hidden_size)
-      if num_layers > 1:
-        cell = tf.nn.rnn_cell.MultiRNNCell([cell] * num_layers)
-      return cell
+    def convolution(value, filter_width, stride, input_channels, out_channels):
+      filters = tf.Variable(tf.random_normal([filter_width, input_channels, out_channels]))
+      convolution_out = tf.nn.conv1d(value, filters, stride, 'SAME', use_cudnn_on_gpu=True)
+      convolution_out = tf.nn.relu(convolution_out)
+      return convolution_out, out_channels
 
-    cell_fw = create_cell()
-    cell_bw = create_cell()
+    # TODO scale up input size of 13 to 250 channels?
+    # One striding layer of output size [batch_size, max_time / 2, input_size]
+    outputs, channels = convolution(self.inputs, 48, 2, input_size, input_size)
 
-    # Define bidirectional RNN
-    outputs, _ = tf.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw, self.inputs,
-                                                 self.sequence_lengths, dtype=tf.float32)
-    outputs = tf.concat(2, outputs)  # of size [batch_size, max_time, 2 * hidden_size]
+    # 7 layers without striding of output size [batch_size, max_time / 2, input_size]
+    for layer_idx in range(7):
+      outputs, channels = convolution(outputs, 7, 1, channels, channels)
 
-    # Linear projection after LSTM output
-    def create_fully_connected_variables(scope_name, output_size):
-      with tf.variable_scope(scope_name) as scope:
-        tf.get_variable('weights', initializer=tf.random_normal([2 * hidden_size, output_size]))
-        tf.get_variable('biases', initializer=tf.random_normal([output_size]))
+    # 1 layer with high kernel width and output size [batch_size, max_time / 2, input_size * 8]
+    outputs, channels = convolution(outputs, 32, 1, channels, channels * 8)
 
-    def fully_connected(scope_name, prev_output, use_relu):
-      with tf.variable_scope(scope_name, reuse=True):
-        weights = tf.get_variable('weights')
-        biases = tf.get_variable('biases')
-        out = tf.matmul(prev_output, weights) + biases
-        if use_relu:
-          return tf.nn.relu(out)
-        return out
+    # 1 fully connected layer of output size [batch_size, max_time / 2, input_size * 8]
+    outputs, channels = convolution(outputs, 1, 1, channels, channels)
 
-    create_fully_connected_variables('hidden_layer', 2 * hidden_size)
-    create_fully_connected_variables('logits_layer', num_classes)
+    # 1 fully connected layer of output size [batch_size, max_time / 2, num_classes]
+    outputs, channels = convolution(outputs, 1, 1, channels, num_classes)
 
-    # iterate outputs and project linearly of size [batch_size, 2 * hidden_size]
-    logits_per_output_list = []
-    for output in tf.unpack(tf.transpose(outputs, (1, 0, 2))):
-      hidden_layer = fully_connected('hidden_layer', output, True)
-      logits_per_output_list.append(fully_connected('logits_layer', hidden_layer, True))
-    # repack logits to size [max_time, batch_size, 2 * hidden_size]
-    logits = tf.pack(logits_per_output_list, 0)
+    # transpose logits to size [max_time / 2, batch_size, num_classes]
+    logits = tf.transpose(outputs, (1, 0, 2))
 
     # Define loss and optimizer
-    self.cost = tf.nn.ctc_loss(logits, self.labels, self.sequence_lengths)
+    self.cost = tf.nn.ctc_loss(logits, self.labels, self.sequence_lengths // 2)
     self.avg_loss = tf.reduce_mean(self.cost)
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
     gvs = optimizer.compute_gradients(self.cost)
@@ -82,7 +66,7 @@ class Wav2LetterModel:
 
     # Decoding
     # TODO use beam search here later
-    self.decoded = tf.nn.ctc_greedy_decoder(logits, self.sequence_lengths)
+    self.decoded = tf.nn.ctc_greedy_decoder(logits, self.sequence_lengths // 2)
 
     # TODO evaluate model
 
@@ -106,15 +90,16 @@ class Wav2LetterModel:
     if len(input_list) != len(label_list):
       raise ValueError('Input list must have same length as label list')
 
-    input_tensor = np.zeros((len(input_list), self.max_time, self.input_size))
     sequence_lengths = np.array([inp.shape[0] for inp in input_list])
+    max_time = sequence_lengths.max()
+    input_tensor = np.zeros((len(input_list), max_time, self.input_size))
 
     # Fill input tensor
     for idx, inp in enumerate(input_list):
       input_tensor[idx, :inp.shape[0], :] = inp
 
     # Fill label tensor
-    label_shape = np.array([len(label_list), self.max_time], dtype=np.int)
+    label_shape = np.array([len(label_list), max_time], dtype=np.int)
     label_indices = []
     label_values = []
     for labelIdx, label in enumerate(label_list):
