@@ -31,6 +31,18 @@ FLAGS = tf.app.flags.FLAGS
 N_COEFFICIENTS = 13
 
 
+def extract_decoded_ids(sparse_tensor):
+  ids = []
+  last_batch_id = 0
+  for i, index in enumerate(sparse_tensor.indices):
+    batch_id, char_id = index
+    if batch_id > last_batch_id:
+      yield ids
+      ids = []
+      last_batch_id = batch_id
+    ids.append(sparse_tensor.values[i])
+
+
 def train():
   model = Wav2LetterModel(N_COEFFICIENTS, vocabulary.SIZE + 1,
                           FLAGS.learning_rate, FLAGS.max_gradient_norm)
@@ -49,12 +61,17 @@ def train():
     for sample_batch in batch(sample_generator, FLAGS.batch_size):
       input_list, label_list = zip(*sample_batch)
 
-      _, avg_loss, cost = model.step(sess, input_list, label_list)
+      _, avg_loss, decoded = model.step(sess, input_list, label_list)
 
-      non_inf_count = np.count_nonzero(~np.isinf(cost))
-      print('Number of not inf loss {}'.format(non_inf_count))
       perplexity = np.exp(float(avg_loss)) if avg_loss < 300 else float("inf")
       print('Average loss: {:.2f}; Perplexity: {:.2f}'.format(avg_loss, perplexity))
+
+      # Retrieve first element of batch and decode
+      decoded_ids = next(extract_decoded_ids(decoded[0]))
+      decoded_str = vocabulary.ids_to_sentence(decoded_ids)
+      expected_str = vocabulary.ids_to_sentence(label_list[0])
+      print('Expected: {}'.format(expected_str))
+      print('Decoded: {}'.format(decoded_str))
 
 
 def main(_):

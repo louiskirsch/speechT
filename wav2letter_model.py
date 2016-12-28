@@ -72,7 +72,7 @@ class Wav2LetterModel:
 
     # Decoding
     # TODO use beam search here later
-    self.decoded = tf.nn.ctc_greedy_decoder(self.logits, self.sequence_lengths // 2)
+    self.decoded, self.log_probabilities = tf.nn.ctc_greedy_decoder(self.logits, self.sequence_lengths // 2)
 
     # TODO evaluate model
 
@@ -124,7 +124,7 @@ class Wav2LetterModel:
     output_feed = [
       self.update,
       self.avg_loss,
-      self.cost
+      self.decoded
     ]
 
     return sess.run(output_feed, feed_dict=input_feed)
