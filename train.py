@@ -43,6 +43,7 @@ def extract_decoded_ids(sparse_tensor):
       ids = []
       last_batch_id = batch_id
     ids.append(sparse_tensor.values[i])
+  yield ids
 
 
 def train():
