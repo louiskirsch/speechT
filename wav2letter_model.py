@@ -63,8 +63,8 @@ class Wav2LetterModel:
     # Define loss and optimizer
     self.cost = tf.nn.ctc_loss(self.logits, self.labels, self.sequence_lengths // 2)
     self.avg_loss = tf.reduce_mean(self.cost)
-    optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
-    gvs = optimizer.compute_gradients(self.cost)
+    optimizer = tf.train.MomentumOptimizer(learning_rate, 0.9)
+    gvs = optimizer.compute_gradients(self.avg_loss)
     gradients, trainables = zip(*gvs)
     clipped_gradients, norm = tf.clip_by_global_norm(gradients,
                                                      max_gradient_norm)
