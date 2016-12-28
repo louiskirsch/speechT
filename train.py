@@ -14,6 +14,7 @@
 # ==============================================================================
 
 import tensorflow as tf
+import numpy as np
 import vocabulary
 from wav2letter_model import Wav2LetterModel
 from preprocess import SpeechCorpusReader
@@ -48,9 +49,12 @@ def train():
     for sample_batch in batch(sample_generator, FLAGS.batch_size):
       input_list, label_list = zip(*sample_batch)
 
-      _, loss = model.step(sess, input_list, label_list)
-      perplexity = tf.math.exp(float(loss)) if loss < 300 else float("inf")
-      print('Average loss: {:.2f}; Perplexity: {:.2f}'.format(loss, perplexity))
+      _, avg_loss, cost = model.step(sess, input_list, label_list)
+
+      non_inf_count = np.count_nonzero(~np.isinf(cost))
+      print('Number of not inf loss {}'.format(non_inf_count))
+      perplexity = tf.math.exp(float(avg_loss)) if avg_loss < 300 else float("inf")
+      print('Average loss: {:.2f}; Perplexity: {:.2f}'.format(avg_loss, perplexity))
 
 
 def main(_):

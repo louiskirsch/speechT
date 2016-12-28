@@ -28,15 +28,20 @@ class Wav2LetterModel:
     self.sequence_lengths = tf.placeholder(tf.int32, [None], name='sequence_lengths')
     self.labels = tf.sparse_placeholder(tf.int32, name='labels')
 
-    def convolution(value, filter_width, stride, input_channels, out_channels):
-      filters = tf.Variable(tf.random_normal([filter_width, input_channels, out_channels]))
+    def convolution(value, filter_width, stride, input_channels, out_channels, apply_non_linearity=True):
+      # TODO Is stddev and constant a good choice?
+      initial_filter = tf.truncated_normal([filter_width, input_channels, out_channels], stddev=0.1)
+      filters = tf.Variable(initial_filter)
+      bias = tf.Variable(tf.constant(0.1, shape=[out_channels]))
       convolution_out = tf.nn.conv1d(value, filters, stride, 'SAME', use_cudnn_on_gpu=True)
-      convolution_out = tf.nn.relu(convolution_out)
+      convolution_out += bias
+      if apply_non_linearity:
+        convolution_out = tf.nn.tanh(convolution_out)
       return convolution_out, out_channels
 
     # TODO scale up input size of 13 to 250 channels?
     # One striding layer of output size [batch_size, max_time / 2, input_size]
-    outputs, channels = convolution(self.inputs, 48, 2, input_size, input_size)
+    outputs, channels = convolution(self.inputs, 48, 2, input_size, 250)
 
     # 7 layers without striding of output size [batch_size, max_time / 2, input_size]
     for layer_idx in range(7):
@@ -48,14 +53,15 @@ class Wav2LetterModel:
     # 1 fully connected layer of output size [batch_size, max_time / 2, input_size * 8]
     outputs, channels = convolution(outputs, 1, 1, channels, channels)
 
+    # TODO skip non linearity here?
     # 1 fully connected layer of output size [batch_size, max_time / 2, num_classes]
     outputs, channels = convolution(outputs, 1, 1, channels, num_classes)
 
     # transpose logits to size [max_time / 2, batch_size, num_classes]
-    logits = tf.transpose(outputs, (1, 0, 2))
+    self.logits = tf.transpose(outputs, (1, 0, 2))
 
     # Define loss and optimizer
-    self.cost = tf.nn.ctc_loss(logits, self.labels, self.sequence_lengths // 2)
+    self.cost = tf.nn.ctc_loss(self.logits, self.labels, self.sequence_lengths // 2)
     self.avg_loss = tf.reduce_mean(self.cost)
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
     gvs = optimizer.compute_gradients(self.cost)
@@ -66,7 +72,7 @@ class Wav2LetterModel:
 
     # Decoding
     # TODO use beam search here later
-    self.decoded = tf.nn.ctc_greedy_decoder(logits, self.sequence_lengths // 2)
+    self.decoded = tf.nn.ctc_greedy_decoder(self.logits, self.sequence_lengths // 2)
 
     # TODO evaluate model
 
@@ -117,7 +123,8 @@ class Wav2LetterModel:
 
     output_feed = [
       self.update,
-      self.avg_loss
+      self.avg_loss,
+      self.cost
     ]
 
     return sess.run(output_feed, feed_dict=input_feed)
