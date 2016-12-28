@@ -10,7 +10,12 @@ The speech corpus from http://www.openslr.org/12/ is automatically downloaded.
 **Note:** The corpus is about 30GB!
 
 ## Training
-To start training just run
+The data must be preprocessed before training
+```
+python3 preprocess.py
+```
+
+Then, to run the training, execute
 ```
 python3 train.py
 ```
