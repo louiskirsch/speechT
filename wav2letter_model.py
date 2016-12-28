@@ -28,6 +28,10 @@ class Wav2LetterModel:
     self.sequence_lengths = tf.placeholder(tf.int32, [None], name='sequence_lengths')
     self.labels = tf.sparse_placeholder(tf.int32, name='labels')
 
+    # Define non-trainables
+    self.global_step = tf.Variable(0, trainable=False)
+
+
     def convolution(value, filter_width, stride, input_channels, out_channels, apply_non_linearity=True):
       # TODO Is stddev and constant a good choice?
       initial_filter = tf.truncated_normal([filter_width, input_channels, out_channels], stddev=0.1)
@@ -68,7 +72,7 @@ class Wav2LetterModel:
     gradients, trainables = zip(*gvs)
     clipped_gradients, norm = tf.clip_by_global_norm(gradients,
                                                      max_gradient_norm)
-    self.update = optimizer.apply_gradients(zip(clipped_gradients, trainables))
+    self.update = optimizer.apply_gradients(zip(clipped_gradients, trainables), global_step=self.global_step)
 
     # Decoding
     # TODO use beam search here later
@@ -79,23 +83,13 @@ class Wav2LetterModel:
     # Initializing the variables
     self.init = tf.initialize_all_variables()
 
+    # Create saver
+    self.saver = tf.train.Saver(tf.all_variables())
+
   def init_session(self, sess):
     sess.run(self.init)
 
-  def step(self, sess, input_list, label_list):
-    """
-
-    Args:
-      sess: tensorflow session
-      input_list: spectrogram inputs, list of Tensors [time, input_size]
-      label_list: identifiers from vocabulary, list of list of int32
-
-    Returns: update, avg_loss
-
-    """
-    if len(input_list) != len(label_list):
-      raise ValueError('Input list must have same length as label list')
-
+  def _get_inputs_feed_item(self, input_list):
     sequence_lengths = np.array([inp.shape[0] for inp in input_list])
     max_time = sequence_lengths.max()
     input_tensor = np.zeros((len(input_list), max_time, self.input_size))
@@ -104,6 +98,10 @@ class Wav2LetterModel:
     for idx, inp in enumerate(input_list):
       input_tensor[idx, :inp.shape[0], :] = inp
 
+    return input_tensor, sequence_lengths, max_time
+
+  @staticmethod
+  def _get_labels_feed_item(label_list, max_time):
     # Fill label tensor
     label_shape = np.array([len(label_list), max_time], dtype=np.int)
     label_indices = []
@@ -114,17 +112,41 @@ class Wav2LetterModel:
         label_values.append(identifier)
     label_indices = np.array(label_indices, dtype=np.int)
     label_values = np.array(label_values, dtype=np.int)
+    return tf.SparseTensorValue(label_indices, label_values, label_shape)
+
+  def step(self, sess, input_list, label_list, update=True, decode=False):
+    """
+
+    Args:
+      sess: tensorflow session
+      input_list: spectrogram inputs, list of Tensors [time, input_size]
+      label_list: identifiers from vocabulary, list of list of int32
+      update: should the network be trained
+      decode: should the decoding be performed and returned
+
+    Returns: avg_loss, decoded (optional), update (optional)
+
+    """
+    if label_list is not None and len(input_list) != len(label_list):
+      raise ValueError('Input list must have same length as label list')
+
+    input_tensor, sequence_lengths, max_time = self._get_inputs_feed_item(input_list)
 
     input_feed = {
       self.inputs: input_tensor,
       self.sequence_lengths: sequence_lengths,
-      self.labels: tf.SparseTensorValue(label_indices, label_values, label_shape)
     }
+    output_feed = []
 
-    output_feed = [
-      self.update,
-      self.avg_loss,
-      self.decoded
-    ]
+    if label_list is not None:
+      labels = self._get_labels_feed_item(label_list, max_time)
+      input_feed[self.labels] = labels
+      output_feed.append(self.avg_loss)
+
+    if decode:
+      output_feed.append(self.decoded[0])
+
+    if update:
+      output_feed.append(self.update)
 
     return sess.run(output_feed, feed_dict=input_feed)
