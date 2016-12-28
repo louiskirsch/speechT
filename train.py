@@ -24,6 +24,8 @@ tf.app.flags.DEFINE_float("max_gradient_norm", 5.0, "Clip gradients to this norm
 tf.app.flags.DEFINE_integer("batch_size", 64,
                             "Batch size to use during training.")
 tf.app.flags.DEFINE_string("data_dir", "data/", "Data directory")
+tf.app.flags.DEFINE_integer("limit_training_set", 0,
+                            "Train on a smaller training set, limited to the specified size")
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -56,7 +58,7 @@ def train():
       args = [iter(iterable)] * batch_size
       return zip(*args)
 
-    sample_generator = reader.load_samples('train', loop_infinitely=True)
+    sample_generator = reader.load_samples('train', loop_infinitely=True, limit_count=FLAGS.limit_training_set)
 
     for sample_batch in batch(sample_generator, FLAGS.batch_size):
       input_list, label_list = zip(*sample_batch)
