@@ -53,7 +53,7 @@ def train():
 
       non_inf_count = np.count_nonzero(~np.isinf(cost))
       print('Number of not inf loss {}'.format(non_inf_count))
-      perplexity = tf.math.exp(float(avg_loss)) if avg_loss < 300 else float("inf")
+      perplexity = np.exp(float(avg_loss)) if avg_loss < 300 else float("inf")
       print('Average loss: {:.2f}; Perplexity: {:.2f}'.format(avg_loss, perplexity))
 
 
