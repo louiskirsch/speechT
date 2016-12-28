@@ -53,9 +53,9 @@ class Wav2LetterModel:
     # 1 fully connected layer of output size [batch_size, max_time / 2, input_size * 8]
     outputs, channels = convolution(outputs, 1, 1, channels, channels)
 
-    # TODO skip non linearity here?
     # 1 fully connected layer of output size [batch_size, max_time / 2, num_classes]
-    outputs, channels = convolution(outputs, 1, 1, channels, num_classes)
+    # We must not apply a non linearity in this last layer
+    outputs, channels = convolution(outputs, 1, 1, channels, num_classes, False)
 
     # transpose logits to size [max_time / 2, batch_size, num_classes]
     self.logits = tf.transpose(outputs, (1, 0, 2))
