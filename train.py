@@ -23,6 +23,8 @@ from wav2letter_model import Wav2LetterModel
 from preprocess import SpeechCorpusReader
 
 tf.app.flags.DEFINE_float("learning_rate", 1e-3, "Learning rate.")
+tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0.9,
+                          "Learning rate decays by this much (multiplication).")
 tf.app.flags.DEFINE_float("max_gradient_norm", 5.0, "Clip gradients to this norm.")
 tf.app.flags.DEFINE_integer("batch_size", 64,
                             "Batch size to use during training.")
@@ -54,8 +56,11 @@ def extract_decoded_ids(sparse_tensor):
 
 def create_model(session):
   """Create speechT model and initialize or load parameters in session."""
-  model = Wav2LetterModel(N_COEFFICIENTS, vocabulary.SIZE + 1,
-                          FLAGS.learning_rate, FLAGS.max_gradient_norm)
+  model = Wav2LetterModel(N_COEFFICIENTS,
+                          vocabulary.SIZE + 1,
+                          FLAGS.learning_rate,
+                          FLAGS.learning_rate_decay_factor,
+                          FLAGS.max_gradient_norm)
   ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
   if ckpt and tf.gfile.Exists(ckpt.model_checkpoint_path):
     print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
@@ -99,9 +104,12 @@ def train():
       if current_step % FLAGS.steps_per_checkpoint == 0:
         # Print statistics for the previous epoch.
         perplexity = np.exp(float(avg_loss)) if avg_loss < 300 else float("inf")
-        print("global step {:d} step-time {:.2f} average loss {:.2f} perplexity {:.2f}".format(
-              model.global_step.eval(), step_time, avg_loss, perplexity))
+        print("global step {:d} learning rate {:.4f} step-time {:.2f} average loss {:.2f} perplexity {:.2f}"
+              .format(model.global_step.eval(), model.learning_rate.eval(), step_time, avg_loss, perplexity))
 
+        # Decrease learning rate if no improvement was seen over last 3 times.
+        if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
+          sess.run(model.learning_rate_decay_op)
         previous_losses.append(loss)
 
         # Save checkpoint and zero timer and loss.

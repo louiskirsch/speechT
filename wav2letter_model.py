@@ -20,8 +20,10 @@ import numpy as np
 class Wav2LetterModel:
 
   def __init__(self, input_size, num_classes,
-               learning_rate, max_gradient_norm):
+               learning_rate, learning_rate_decay_factor, max_gradient_norm):
     self.input_size = input_size
+
+    # TODO give all variables / ops proper names
 
     # Define input placeholders
     self.inputs = tf.placeholder(tf.float32, [None, None, input_size], name='inputs')
@@ -30,7 +32,8 @@ class Wav2LetterModel:
 
     # Define non-trainables
     self.global_step = tf.Variable(0, trainable=False)
-
+    self.learning_rate = tf.Variable(float(learning_rate), trainable=False, dtype=tf.float32, name='learning_rate')
+    self.learning_rate_decay_op = self.learning_rate.assign(tf.mul(self.learning_rate, learning_rate_decay_factor))
 
     def convolution(value, filter_width, stride, input_channels, out_channels, apply_non_linearity=True):
       # TODO Is stddev and constant a good choice?
@@ -67,7 +70,7 @@ class Wav2LetterModel:
     # Define loss and optimizer
     self.cost = tf.nn.ctc_loss(self.logits, self.labels, self.sequence_lengths // 2)
     self.avg_loss = tf.reduce_mean(self.cost)
-    optimizer = tf.train.MomentumOptimizer(learning_rate, 0.9)
+    optimizer = tf.train.MomentumOptimizer(self.learning_rate, 0.9)
     gvs = optimizer.compute_gradients(self.avg_loss)
     gradients, trainables = zip(*gvs)
     clipped_gradients, norm = tf.clip_by_global_norm(gradients,
