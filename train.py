@@ -99,14 +99,17 @@ def train():
     for sample_batch in batch(sample_generator, FLAGS.batch_size):
       input_list, label_list = zip(*sample_batch)
 
+      current_step += 1
+      is_checkpoint_step = current_step % FLAGS.steps_per_checkpoint == 0
+
       start_time = time.time()
-      avg_loss, _ = model.step(sess, input_list, label_list)
+      step_result = model.step(sess, input_list, label_list, summary=is_checkpoint_step)
+      avg_loss = step_result[0]
       step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
       loss += avg_loss / FLAGS.steps_per_checkpoint
-      current_step += 1
 
       # Once in a while, we save checkpoint, print statistics, and run evals.
-      if current_step % FLAGS.steps_per_checkpoint == 0:
+      if is_checkpoint_step:
         global_step = model.global_step.eval()
 
         # Print statistics for the previous epoch.
@@ -124,8 +127,8 @@ def train():
         model.saver.save(sess, checkpoint_path, global_step=model.global_step)
         step_time, loss = 0.0, 0.0
 
-        # Generate and store summary
-        avg_loss, summary = model.step(sess, input_list, label_list, update=False, decode=False, summary=True)
+        # Retrieve and store summary
+        summary = step_result[2]
         model.train_writer.add_summary(summary, global_step)
 
         # Validate on development set and write summary
