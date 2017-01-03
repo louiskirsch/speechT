@@ -93,18 +93,18 @@ class Wav2LetterModel:
         else:
           return convolution_out, out_channels
 
-    # TODO scale up input size of 13 to 250 channels?
-    # One striding layer of output size [batch_size, max_time / 2, input_size]
+    # The first layer scales up from input_size channels to 250 channels
+    # One striding layer of output size [batch_size, max_time / 2, 250]
     outputs, channels = convolution(self.inputs, 48, 2, input_size, 250)
 
-    # 7 layers without striding of output size [batch_size, max_time / 2, input_size]
+    # 7 layers without striding of output size [batch_size, max_time / 2, 250]
     for layer_idx in range(7):
       outputs, channels = convolution(outputs, 7, 1, channels, channels)
 
-    # 1 layer with high kernel width and output size [batch_size, max_time / 2, input_size * 8]
+    # 1 layer with high kernel width and output size [batch_size, max_time / 2, 2000]
     outputs, channels = convolution(outputs, 32, 1, channels, channels * 8)
 
-    # 1 fully connected layer of output size [batch_size, max_time / 2, input_size * 8]
+    # 1 fully connected layer of output size [batch_size, max_time / 2, 2000]
     outputs, channels = convolution(outputs, 1, 1, channels, channels)
 
     # 1 fully connected layer of output size [batch_size, max_time / 2, num_classes]
@@ -134,8 +134,6 @@ class Wav2LetterModel:
     with tf.name_scope('decoding'):
       # TODO use beam search here later
       self.decoded, self.log_probabilities = tf.nn.ctc_greedy_decoder(self.logits, self.sequence_lengths // 2)
-
-    # TODO evaluate model
 
     # Initializing the variables
     self.init = tf.initialize_all_variables()
