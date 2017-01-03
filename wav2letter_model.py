@@ -21,6 +21,18 @@ class Wav2LetterModel:
 
   def __init__(self, input_size, num_classes, learning_rate, learning_rate_decay_factor, max_gradient_norm,
                log_dir, use_relu):
+    """
+    Create a new Wav2Letter model
+
+    Args:
+      input_size: the number of values per time step
+      num_classes: the number of output classes (vocabulary_size + 1 for blank label)
+      learning_rate: the inital learning rate
+      learning_rate_decay_factor: the factor to multiple the learning rate with when it should be decreased
+      max_gradient_norm: the maximum gradient norm to apply, otherwise clipping is applied
+      log_dir: the directory to log to for use of tensorboard
+      use_relu: if True, use relu instead of tanh
+    """
     self.input_size = input_size
 
     activation_fnc = tf.nn.relu if use_relu else tf.nn.tanh
@@ -124,15 +136,39 @@ class Wav2LetterModel:
     self.summary_writer = tf.train.SummaryWriter(log_dir)
 
   def init_session(self, sess, init_variables=True):
+    """
+    Initialize a new session for the model.
+
+    Args:
+      sess: session to initalize
+      init_variables: whether to initialize all variables
+
+    """
     if init_variables:
       sess.run(self.init)
 
     self.summary_writer.add_graph(sess.graph)
 
   def add_summary(self, summary):
+    """
+    Log the given `summary` protocol buffer
+
+    Args:
+      summary: protocol buffer obtained from evaluation all merged summaries
+
+    """
     self.summary_writer.add_summary(summary, self.global_step.eval())
 
   def _get_inputs_feed_item(self, input_list):
+    """
+    Generate the tensor from `input_list` to feed into the network
+
+    Args:
+      input_list: a list of numpy arrays of shape [time, input_size]
+
+    Returns: tuple (input_tensor, sequence_lengths, max_time)
+
+    """
     sequence_lengths = np.array([inp.shape[0] for inp in input_list])
     max_time = sequence_lengths.max()
     input_tensor = np.zeros((len(input_list), max_time, self.input_size))
@@ -145,7 +181,17 @@ class Wav2LetterModel:
 
   @staticmethod
   def _get_labels_feed_item(label_list, max_time):
-    # Fill label tensor
+    """
+    Generate the tensor from 'label_list' to feed as labels into the network
+
+    Args:
+      label_list: a list of encoded labels (ints)
+      max_time: the maximum time length of `label_list`
+
+    Returns: the SparseTensorValue to feed into the network
+
+    """
+
     label_shape = np.array([len(label_list), max_time], dtype=np.int)
     label_indices = []
     label_values = []
@@ -159,6 +205,7 @@ class Wav2LetterModel:
 
   def step(self, sess, input_list, label_list, update=True, decode=False, summary=False):
     """
+    Evaluate the graph, you may update weights, decode audio or generate a summary
 
     Args:
       sess: tensorflow session
