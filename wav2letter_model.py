@@ -20,7 +20,7 @@ import numpy as np
 class Wav2LetterModel:
 
   def __init__(self, input_size, num_classes, learning_rate, learning_rate_decay_factor, max_gradient_norm,
-               log_dir, use_relu):
+               log_dir, use_relu, run_name):
     """
     Create a new Wav2Letter model
 
@@ -145,8 +145,10 @@ class Wav2LetterModel:
 
     # Create summary writers
     self.merged_summaries = tf.merge_all_summaries()
-    self.train_writer = tf.train.SummaryWriter(log_dir + '/train')
-    self.dev_writer = tf.train.SummaryWriter(log_dir + '/dev')
+    if run_name:
+      run_name += '_'
+    self.train_writer = tf.train.SummaryWriter('{}/{}train'.format(log_dir, run_name))
+    self.dev_writer = tf.train.SummaryWriter('{}/{}dev'.format(log_dir, run_name))
 
   def init_session(self, sess, init_variables=True):
     """

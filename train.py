@@ -32,6 +32,7 @@ tf.app.flags.DEFINE_integer("batch_size", 64,
 tf.app.flags.DEFINE_string("data_dir", "data/", "Data directory")
 tf.app.flags.DEFINE_string("train_dir", "train/", "Training directory")
 tf.app.flags.DEFINE_string("log_dir", "log/", "Logging directory for summaries")
+tf.app.flags.DEFINE_string("run_name", "", "Give this training a name to appear in tensorboard")
 tf.app.flags.DEFINE_integer("limit_training_set", 0,
                             "Train on a smaller training set, limited to the specified size")
 tf.app.flags.DEFINE_integer("steps_per_checkpoint", 200,
@@ -63,7 +64,8 @@ def create_model(session):
                           FLAGS.learning_rate_decay_factor,
                           FLAGS.max_gradient_norm,
                           FLAGS.log_dir,
-                          FLAGS.relu)
+                          FLAGS.relu,
+                          FLAGS.run_name)
   ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
   if ckpt and tf.gfile.Exists(ckpt.model_checkpoint_path):
     print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
