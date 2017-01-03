@@ -41,7 +41,18 @@ def calc_mfccs(audio_data, samplerate, n_mfcc=13, n_fft=400, hop_length=160):
   """
   mfcc = librosa.feature.mfcc(audio_data, sr=samplerate, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length)
 
-  # TODO do we need to normalize to mean 0 and std 1 ?
+  def normalize(values):
+    """
+    Normalize values to mean 0 and std 1
+    """
+    return (values - np.mean(values)) / np.std(values)
+
+  # add derivatives and normalize
+  mfcc_delta = librosa.feature.delta(mfcc)
+  mfcc_delta2 = librosa.feature.delta(mfcc, order=2)
+  mfcc = np.concatenate((normalize(mfcc),
+                         normalize(mfcc_delta),
+                         normalize(mfcc_delta2)), axis=0)
 
   return mfcc.T
 

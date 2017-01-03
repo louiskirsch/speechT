@@ -39,8 +39,7 @@ tf.app.flags.DEFINE_integer("steps_per_checkpoint", 200,
 
 FLAGS = tf.app.flags.FLAGS
 
-# TODO what's the right value? set it as parameter?
-N_COEFFICIENTS = 13
+N_COEFFICIENTS = 13 * 3
 
 
 def extract_decoded_ids(sparse_tensor):
