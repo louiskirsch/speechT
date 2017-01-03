@@ -91,6 +91,7 @@ def train():
       return zip(*args)
 
     sample_generator = reader.load_samples('train', loop_infinitely=True, limit_count=FLAGS.limit_training_set)
+    dev_sample_generator = reader.load_samples('dev', loop_infinitely=True)
 
     step_time, loss = 0.0, 0.0
     current_step = 0
@@ -107,10 +108,12 @@ def train():
 
       # Once in a while, we save checkpoint, print statistics, and run evals.
       if current_step % FLAGS.steps_per_checkpoint == 0:
+        global_step = model.global_step.eval()
+
         # Print statistics for the previous epoch.
         perplexity = np.exp(float(avg_loss)) if avg_loss < 300 else float("inf")
         print("global step {:d} learning rate {:.4f} step-time {:.2f} average loss {:.2f} perplexity {:.2f}"
-              .format(model.global_step.eval(), model.learning_rate.eval(), step_time, avg_loss, perplexity))
+              .format(global_step, model.learning_rate.eval(), step_time, avg_loss, perplexity))
 
         # Decrease learning rate if no improvement was seen over last 3 times.
         if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
@@ -122,16 +125,21 @@ def train():
         model.saver.save(sess, checkpoint_path, global_step=model.global_step)
         step_time, loss = 0.0, 0.0
 
-        # Retrieve first element of batch and decode
-        avg_loss, decoded, summary = model.step(sess, input_list, label_list, update=False, decode=True, summary=True)
+        # Generate and store summary
+        avg_loss, summary = model.step(sess, input_list, label_list, update=False, decode=False, summary=True)
+        model.train_writer.add_summary(summary, global_step)
+
+        # Validate on development set and write summary
+        audio, label = next(dev_sample_generator)
+        avg_loss, decoded, summary = model.step(sess, [audio], [label], update=False, decode=True, summary=True)
+        model.dev_writer.add_summary(summary, global_step)
+        perplexity = np.exp(float(avg_loss)) if avg_loss < 300 else float("inf")
+        print("Validation average loss {:.2f} perplexity {:.2f}".format(avg_loss, perplexity))
         decoded_ids = next(extract_decoded_ids(decoded))
         decoded_str = vocabulary.ids_to_sentence(decoded_ids)
         expected_str = vocabulary.ids_to_sentence(label_list[0])
         print('Expected: {}'.format(expected_str))
         print('Decoded: {}'.format(decoded_str))
-
-        # Write summaries
-        model.add_summary(summary)
 
 
 def main(_):

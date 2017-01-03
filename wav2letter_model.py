@@ -37,8 +37,6 @@ class Wav2LetterModel:
 
     activation_fnc = tf.nn.relu if use_relu else tf.nn.tanh
 
-    # TODO give all variables / ops proper names
-
     # Define input placeholders
     # inputs is of dimension [batch_size, max_time, input_size]
     self.inputs = tf.placeholder(tf.float32, [None, None, input_size], name='inputs')
@@ -48,45 +46,52 @@ class Wav2LetterModel:
     # Define non-trainables
     self.global_step = tf.Variable(0, trainable=False)
     self.learning_rate = tf.Variable(float(learning_rate), trainable=False, dtype=tf.float32, name='learning_rate')
-    self.learning_rate_decay_op = self.learning_rate.assign(tf.mul(self.learning_rate, learning_rate_decay_factor))
+    self.learning_rate_decay_op = self.learning_rate.assign(
+                                   tf.mul(self.learning_rate, learning_rate_decay_factor, name='learning_rate_decay'))
 
-    self.filter_summaries = []
+    # Variable summaries
+    tf.scalar_summary('learning_rate', self.learning_rate)
 
     def convolution(value, filter_width, stride, input_channels, out_channels, apply_non_linearity=True):
-      # Filter and bias
-      # TODO Is stddev and constant a good choice?
-      initial_filter = tf.truncated_normal([filter_width, input_channels, out_channels], stddev=0.1)
-      filters = tf.Variable(initial_filter)
-      bias = tf.Variable(tf.constant(0.0, shape=[out_channels]))
+      try:
+        convolution.layer_id += 1
+      except AttributeError:
+        convolution.layer_id = 1
 
-      # Apply convolution
-      convolution_out = tf.nn.conv1d(value, filters, stride, 'SAME', use_cudnn_on_gpu=True)
+      with tf.name_scope('convolution-layer-{}'.format(convolution.layer_id)) as layer:
+        # Filter and bias
+        initial_filter = tf.truncated_normal([filter_width, input_channels, out_channels], stddev=0.1)
+        filters = tf.Variable(initial_filter, name='filters')
+        bias = tf.Variable(tf.constant(0.0, shape=[out_channels]), name='bias')
 
-      # Create summary
-      layer_id = len(self.filter_summaries)
-      with tf.variable_scope('visualization'):
-        # scale weights to [0 1], type is still float
-        x_min = tf.reduce_min(filters)
-        x_max = tf.reduce_max(filters)
-        kernel_0_to_1 = (filters - x_min) / (x_max - x_min)
+        # Apply convolution
+        convolution_out = tf.nn.conv1d(value, filters, stride, 'SAME', use_cudnn_on_gpu=True, name='convolution')
 
-        # add depth of 1 (=grayscale) leading to shape [filter_width, input_channels, 1, out_channels]
-        kernel_with_depth = tf.expand_dims(kernel_0_to_1, 2)
-        # to tf.image_summary format [batch_size=out_channels, height=filter_width, width=input_channels, channels=1]
-        kernel_transposed = tf.transpose(kernel_with_depth, [3, 0, 1, 2])
+        # Create summary
+        with tf.name_scope('summaries'):
+          # add depth of 1 (=grayscale) leading to shape [filter_width, input_channels, 1, out_channels]
+          kernel_with_depth = tf.expand_dims(filters, 2)
 
-        # this will display random 3 filters from all the output channels
-        filter_summary = tf.image_summary('convolution{}/filters'.format(layer_id), kernel_transposed, max_images=3)
-        self.filter_summaries.append(filter_summary)
+          # to tf.image_summary format [batch_size=out_channels, height=filter_width, width=input_channels, channels=1]
+          kernel_transposed = tf.transpose(kernel_with_depth, [3, 0, 1, 2])
 
-      # Add bias
-      convolution_out += bias
+          # this will display random 3 filters from all the output channels
+          tf.image_summary('filters', kernel_transposed, max_images=3)
+          tf.histogram_summary('filters/histogram', filters)
 
-      # Add non-linearity
-      if apply_non_linearity:
-        convolution_out = activation_fnc(convolution_out)
+          tf.image_summary('bias/image', tf.reshape(bias, [1, 1, out_channels, 1]))
+          tf.histogram_summary('bias/histogram', bias)
 
-      return convolution_out, out_channels
+        # Add bias
+        convolution_out += bias
+
+        if apply_non_linearity:
+          # Add non-linearity
+          activations = activation_fnc(convolution_out, name='activation')
+          tf.histogram_summary('activation/histogram', activations)
+          return activations, out_channels
+        else:
+          return convolution_out, out_channels
 
     # TODO scale up input size of 13 to 250 channels?
     # One striding layer of output size [batch_size, max_time / 2, input_size]
@@ -110,18 +115,21 @@ class Wav2LetterModel:
     self.logits = tf.transpose(outputs, (1, 0, 2))
 
     # Define loss and optimizer
-    self.cost = tf.nn.ctc_loss(self.logits, self.labels, self.sequence_lengths // 2)
-    self.avg_loss = tf.reduce_mean(self.cost)
-    optimizer = tf.train.MomentumOptimizer(self.learning_rate, 0.9)
-    gvs = optimizer.compute_gradients(self.avg_loss)
-    gradients, trainables = zip(*gvs)
-    clipped_gradients, norm = tf.clip_by_global_norm(gradients,
-                                                     max_gradient_norm)
-    self.update = optimizer.apply_gradients(zip(clipped_gradients, trainables), global_step=self.global_step)
+    with tf.name_scope('training'):
+      self.cost = tf.nn.ctc_loss(self.logits, self.labels, self.sequence_lengths // 2)
+      self.avg_loss = tf.reduce_mean(self.cost, name='average_loss')
+      tf.scalar_summary('loss', self.avg_loss)
+      optimizer = tf.train.MomentumOptimizer(self.learning_rate, 0.9, name='optimizer')
+      gvs = optimizer.compute_gradients(self.avg_loss)
+      gradients, trainables = zip(*gvs)
+      clipped_gradients, norm = tf.clip_by_global_norm(gradients, max_gradient_norm, name='clip_gradients')
+      self.update = optimizer.apply_gradients(zip(clipped_gradients, trainables),
+                                              global_step=self.global_step, name='apply_gradients')
 
     # Decoding
-    # TODO use beam search here later
-    self.decoded, self.log_probabilities = tf.nn.ctc_greedy_decoder(self.logits, self.sequence_lengths // 2)
+    with tf.name_scope('decoding'):
+      # TODO use beam search here later
+      self.decoded, self.log_probabilities = tf.nn.ctc_greedy_decoder(self.logits, self.sequence_lengths // 2)
 
     # TODO evaluate model
 
@@ -131,9 +139,10 @@ class Wav2LetterModel:
     # Create saver
     self.saver = tf.train.Saver(tf.all_variables())
 
-    # Create summary writer
+    # Create summary writers
     self.merged_summaries = tf.merge_all_summaries()
-    self.summary_writer = tf.train.SummaryWriter(log_dir)
+    self.train_writer = tf.train.SummaryWriter(log_dir + '/train')
+    self.dev_writer = tf.train.SummaryWriter(log_dir + '/dev')
 
   def init_session(self, sess, init_variables=True):
     """
@@ -147,17 +156,8 @@ class Wav2LetterModel:
     if init_variables:
       sess.run(self.init)
 
-    self.summary_writer.add_graph(sess.graph)
-
-  def add_summary(self, summary):
-    """
-    Log the given `summary` protocol buffer
-
-    Args:
-      summary: protocol buffer obtained from evaluation all merged summaries
-
-    """
-    self.summary_writer.add_summary(summary, self.global_step.eval())
+    self.train_writer.add_graph(sess.graph)
+    self.dev_writer.add_graph(sess.graph)
 
   def _get_inputs_feed_item(self, input_list):
     """
