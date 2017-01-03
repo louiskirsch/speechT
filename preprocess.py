@@ -207,17 +207,31 @@ if __name__ == '__main__':
     description='Generate preprocessed file from audio files and transcripts')
   parser.add_argument('--data_directory', type=str, required=False, default='data',
                       help='the data directory to pull the files from and store the preprocessed file')
+  parser.add_argument('--all', required=False, default=False, action='store_true',
+                      help='Preprocess training, test and development data')
+  parser.add_argument('--train', required=False, default=False, action='store_true',
+                      help='Preprocess training data')
+  parser.add_argument('--test', required=False, default=False, action='store_true',
+                      help='Preprocess test data')
+  parser.add_argument('--dev', required=False, default=False, action='store_true',
+                      help='Preprocess development data')
   args = parser.parse_args()
+
+  if not(args.all or args.train or args.test or args.dev):
+    print('You must specify the data set to preprocess. Use --help')
 
   corpus = corpus.SpeechCorpusProvider(args.data_directory)
   corpus.ensure_availability()
   corpus_reader = SpeechCorpusReader(args.data_directory)
 
-  print('Preprocessing training data')
-  corpus_reader.store_samples('train')
+  if args.all or args.train:
+    print('Preprocessing training data')
+    corpus_reader.store_samples('train')
 
-  print('Preprocessing test data')
-  corpus_reader.store_samples('test')
+  if args.all or args.test:
+    print('Preprocessing test data')
+    corpus_reader.store_samples('test')
 
-  print('Preprocessing development data')
-  corpus_reader.store_samples('dev')
+  if args.all or args.dev:
+    print('Preprocessing development data')
+    corpus_reader.store_samples('dev')
