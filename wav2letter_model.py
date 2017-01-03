@@ -20,12 +20,14 @@ import numpy as np
 class Wav2LetterModel:
 
   def __init__(self, input_size, num_classes,
-               learning_rate, learning_rate_decay_factor, max_gradient_norm):
+               learning_rate, learning_rate_decay_factor, max_gradient_norm,
+               log_dir):
     self.input_size = input_size
 
     # TODO give all variables / ops proper names
 
     # Define input placeholders
+    # input is of dimension [batch_size, max_time, input_size]
     self.inputs = tf.placeholder(tf.float32, [None, None, input_size], name='inputs')
     self.sequence_lengths = tf.placeholder(tf.int32, [None], name='sequence_lengths')
     self.labels = tf.sparse_placeholder(tf.int32, name='labels')
@@ -35,15 +37,42 @@ class Wav2LetterModel:
     self.learning_rate = tf.Variable(float(learning_rate), trainable=False, dtype=tf.float32, name='learning_rate')
     self.learning_rate_decay_op = self.learning_rate.assign(tf.mul(self.learning_rate, learning_rate_decay_factor))
 
+    self.filter_summaries = []
+
     def convolution(value, filter_width, stride, input_channels, out_channels, apply_non_linearity=True):
+      # Filter and bias
       # TODO Is stddev and constant a good choice?
       initial_filter = tf.truncated_normal([filter_width, input_channels, out_channels], stddev=0.1)
       filters = tf.Variable(initial_filter)
       bias = tf.Variable(tf.constant(0.1, shape=[out_channels]))
+
+      # Apply convolution
       convolution_out = tf.nn.conv1d(value, filters, stride, 'SAME', use_cudnn_on_gpu=True)
+
+      # Create summary
+      layer_id = len(self.filter_summaries)
+      with tf.variable_scope('visualization'):
+        # scale weights to [0 1], type is still float
+        x_min = tf.reduce_min(filters)
+        x_max = tf.reduce_max(filters)
+        kernel_0_to_1 = (filters - x_min) / (x_max - x_min)
+
+        # add depth of 1 (=grayscale) leading to shape [filter_width, input_channels, 1, out_channels]
+        kernel_with_depth = tf.expand_dims(kernel_0_to_1, 2)
+        # to tf.image_summary format [batch_size=out_channels, height=filter_width, width=input_channels, channels=1]
+        kernel_transposed = tf.transpose(kernel_with_depth, [3, 0, 1, 2])
+
+        # this will display random 3 filters from all the output channels
+        filter_summary = tf.image_summary('convolution{}/filters'.format(layer_id), kernel_transposed, max_images=3)
+        self.filter_summaries.append(filter_summary)
+
+      # Add bias
       convolution_out += bias
+
+      # Add non-linearity
       if apply_non_linearity:
         convolution_out = tf.nn.tanh(convolution_out)
+
       return convolution_out, out_channels
 
     # TODO scale up input size of 13 to 250 channels?
@@ -89,8 +118,18 @@ class Wav2LetterModel:
     # Create saver
     self.saver = tf.train.Saver(tf.all_variables())
 
-  def init_session(self, sess):
-    sess.run(self.init)
+    # Create summary writer
+    self.merged_summaries = tf.merge_all_summaries()
+    self.summary_writer = tf.train.SummaryWriter(log_dir)
+
+  def init_session(self, sess, init_variables=True):
+    if init_variables:
+      sess.run(self.init)
+
+    self.summary_writer.add_graph(sess.graph)
+
+  def add_summary(self, summary):
+    self.summary_writer.add_summary(summary, self.global_step.eval())
 
   def _get_inputs_feed_item(self, input_list):
     sequence_lengths = np.array([inp.shape[0] for inp in input_list])
@@ -117,7 +156,7 @@ class Wav2LetterModel:
     label_values = np.array(label_values, dtype=np.int)
     return tf.SparseTensorValue(label_indices, label_values, label_shape)
 
-  def step(self, sess, input_list, label_list, update=True, decode=False):
+  def step(self, sess, input_list, label_list, update=True, decode=False, summary=False):
     """
 
     Args:
@@ -126,8 +165,9 @@ class Wav2LetterModel:
       label_list: identifiers from vocabulary, list of list of int32
       update: should the network be trained
       decode: should the decoding be performed and returned
+      summary: should the summary be generated
 
-    Returns: avg_loss, decoded (optional), update (optional)
+    Returns: avg_loss, decoded (optional), update (optional), summary (optional)
 
     """
     if label_list is not None and len(input_list) != len(label_list):
@@ -151,5 +191,8 @@ class Wav2LetterModel:
 
     if update:
       output_feed.append(self.update)
+
+    if summary:
+      output_feed.append(self.merged_summaries)
 
     return sess.run(output_feed, feed_dict=input_feed)

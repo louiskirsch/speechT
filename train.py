@@ -30,6 +30,7 @@ tf.app.flags.DEFINE_integer("batch_size", 64,
                             "Batch size to use during training.")
 tf.app.flags.DEFINE_string("data_dir", "data/", "Data directory")
 tf.app.flags.DEFINE_string("train_dir", "train/", "Training directory")
+tf.app.flags.DEFINE_string("log_dir", "log/", "Logging directory for summaries")
 tf.app.flags.DEFINE_integer("limit_training_set", 0,
                             "Train on a smaller training set, limited to the specified size")
 tf.app.flags.DEFINE_integer("steps_per_checkpoint", 200,
@@ -60,14 +61,16 @@ def create_model(session):
                           vocabulary.SIZE + 1,
                           FLAGS.learning_rate,
                           FLAGS.learning_rate_decay_factor,
-                          FLAGS.max_gradient_norm)
+                          FLAGS.max_gradient_norm,
+                          FLAGS.log_dir)
   ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
   if ckpt and tf.gfile.Exists(ckpt.model_checkpoint_path):
     print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
     model.saver.restore(session, ckpt.model_checkpoint_path)
+    model.init_session(session, init_variables=False)
   else:
     print("Created model with fresh parameters.")
-    model.init_session(session)
+    model.init_session(session, init_variables=True)
   return model
 
 
@@ -118,12 +121,15 @@ def train():
         step_time, loss = 0.0, 0.0
 
         # Retrieve first element of batch and decode
-        avg_loss, decoded = model.step(sess, input_list, label_list, update=False, decode=True)
+        avg_loss, decoded, summary = model.step(sess, input_list, label_list, update=False, decode=True, summary=True)
         decoded_ids = next(extract_decoded_ids(decoded))
         decoded_str = vocabulary.ids_to_sentence(decoded_ids)
         expected_str = vocabulary.ids_to_sentence(label_list[0])
         print('Expected: {}'.format(expected_str))
         print('Decoded: {}'.format(decoded_str))
+
+        # Write summaries
+        model.add_summary(summary)
 
 
 def main(_):
