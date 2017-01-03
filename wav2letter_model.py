@@ -116,6 +116,7 @@ class Wav2LetterModel:
 
     # Generate summary image for logits [batch_size=batch_size, height=num_classes, width=max_time / 2, channels=1]
     tf.image_summary('logits', tf.expand_dims(tf.transpose(outputs, (0, 2, 1)), 3))
+    tf.histogram_summary('logits', outputs)
 
     # Define loss and optimizer
     with tf.name_scope('training'):
