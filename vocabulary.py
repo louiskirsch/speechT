@@ -22,6 +22,15 @@ SIZE = 28
 
 
 def letter_to_id(letter):
+  """
+  Converts `letter` to vocabulary id
+
+  Args:
+    letter: letter to convert, allowed is a-z, apostrophe and space
+
+  Returns: the vocabulary encoded letter
+
+  """
   if letter == ' ':
     return SPACE_ID
   if letter == '\'':
@@ -30,6 +39,15 @@ def letter_to_id(letter):
 
 
 def id_to_letter(identifier):
+  """
+  Converts the vocabulary encoded letter `identifier` to its character representation
+
+  Args:
+    identifier: encoded letter to decode
+
+  Returns: the character letter
+
+  """
   if identifier == SPACE_ID:
     return ' '
   if identifier == APOSTROPHE:
@@ -38,8 +56,26 @@ def id_to_letter(identifier):
 
 
 def sentence_to_ids(sentence):
+  """
+  Convert a string `sentence` to its encoded representation
+
+  Args:
+    sentence: sentence of type string
+
+  Returns: list of ints (encoded characters)
+
+  """
   return [letter_to_id(letter) for letter in sentence.lower()]
 
 
 def ids_to_sentence(identifiers):
+  """
+  Convert an complete list of encoded characters `identifiers` to their character representation
+
+  Args:
+    identifiers:  list of ints (encoded characters)
+
+  Returns: decoded sentence as string
+
+  """
   return ''.join(id_to_letter(identifier) for identifier in identifiers)
