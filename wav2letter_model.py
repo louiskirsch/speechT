@@ -58,7 +58,7 @@ class Wav2LetterModel:
       except AttributeError:
         convolution.layer_id = 1
 
-      with tf.name_scope('convolution-layer-{}'.format(convolution.layer_id)) as layer:
+      with tf.name_scope('convolution_layer_{}'.format(convolution.layer_id)) as layer:
         # Filter and bias
         initial_filter = tf.truncated_normal([filter_width, input_channels, out_channels], stddev=0.1)
         filters = tf.Variable(initial_filter, name='filters')
@@ -76,11 +76,11 @@ class Wav2LetterModel:
           kernel_transposed = tf.transpose(kernel_with_depth, [3, 0, 1, 2])
 
           # this will display random 3 filters from all the output channels
-          tf.image_summary('filters', kernel_transposed, max_images=3)
-          tf.histogram_summary('filters/histogram', filters)
+          tf.image_summary(layer + 'filters', kernel_transposed, max_images=3)
+          tf.histogram_summary(layer + 'filters', filters)
 
-          tf.image_summary('bias/image', tf.reshape(bias, [1, 1, out_channels, 1]))
-          tf.histogram_summary('bias/histogram', bias)
+          tf.image_summary(layer + 'bias', tf.reshape(bias, [1, 1, out_channels, 1]))
+          tf.histogram_summary(layer + 'bias', bias)
 
         # Add bias
         convolution_out += bias
@@ -88,7 +88,7 @@ class Wav2LetterModel:
         if apply_non_linearity:
           # Add non-linearity
           activations = activation_fnc(convolution_out, name='activation')
-          tf.histogram_summary('activation/histogram', activations)
+          tf.histogram_summary(layer + 'activation', activations)
           return activations, out_channels
         else:
           return convolution_out, out_channels
@@ -113,6 +113,9 @@ class Wav2LetterModel:
 
     # transpose logits to size [max_time / 2, batch_size, num_classes]
     self.logits = tf.transpose(outputs, (1, 0, 2))
+
+    # Generate summary image for logits [batch_size=batch_size, height=num_classes, width=max_time / 2, channels=1]
+    tf.image_summary('logits', tf.expand_dims(tf.transpose(outputs, (0, 2, 1)), 3))
 
     # Define loss and optimizer
     with tf.name_scope('training'):
