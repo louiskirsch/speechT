@@ -119,16 +119,6 @@ def train():
         print("global step {:d} learning rate {:.4f} step-time {:.2f} average loss {:.2f} perplexity {:.2f}"
               .format(global_step, model.learning_rate.eval(), step_time, avg_loss, perplexity))
 
-        # Decrease learning rate if no improvement was seen over last 3 times.
-        if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
-          sess.run(model.learning_rate_decay_op)
-        previous_losses.append(loss)
-
-        # Save checkpoint and zero timer and loss.
-        checkpoint_path = os.path.join(FLAGS.train_dir, "speechT.ckpt")
-        model.saver.save(sess, checkpoint_path, global_step=model.global_step)
-        step_time, loss = 0.0, 0.0
-
         # Retrieve and store summary
         summary = step_result[2]
         model.train_writer.add_summary(summary, global_step)
@@ -138,12 +128,24 @@ def train():
         avg_loss, decoded, summary = model.step(sess, [audio], [label], update=False, decode=True, summary=True)
         model.dev_writer.add_summary(summary, global_step)
         perplexity = np.exp(float(avg_loss)) if avg_loss < 300 else float("inf")
-        print("Validation average loss {:.2f} perplexity {:.2f}".format(avg_loss, perplexity))
+        print("validation average loss {:.2f} perplexity {:.2f}".format(avg_loss, perplexity))
         decoded_ids = next(extract_decoded_ids(decoded))
         decoded_str = vocabulary.ids_to_sentence(decoded_ids)
         expected_str = vocabulary.ids_to_sentence(label_list[0])
-        print('Expected: {}'.format(expected_str))
-        print('Decoded: {}'.format(decoded_str))
+        print('expected: {}'.format(expected_str))
+        print('decoded: {}'.format(decoded_str))
+
+        # Decrease learning rate if no improvement was seen over last 3 times.
+        if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
+          sess.run(model.learning_rate_decay_op)
+        previous_losses.append(loss)
+
+        # Save checkpoint and zero timer and loss.
+        checkpoint_path = os.path.join(FLAGS.train_dir, "speechT.ckpt")
+        model.saver.save(sess, checkpoint_path, global_step=model.global_step)
+        print('Model saved')
+        step_time, loss = 0.0, 0.0
+
 
 
 def main(_):
