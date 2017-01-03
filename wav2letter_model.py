@@ -19,15 +19,16 @@ import numpy as np
 
 class Wav2LetterModel:
 
-  def __init__(self, input_size, num_classes,
-               learning_rate, learning_rate_decay_factor, max_gradient_norm,
-               log_dir):
+  def __init__(self, input_size, num_classes, learning_rate, learning_rate_decay_factor, max_gradient_norm,
+               log_dir, use_relu):
     self.input_size = input_size
+
+    activation_fnc = tf.nn.relu if use_relu else tf.nn.tanh
 
     # TODO give all variables / ops proper names
 
     # Define input placeholders
-    # input is of dimension [batch_size, max_time, input_size]
+    # inputs is of dimension [batch_size, max_time, input_size]
     self.inputs = tf.placeholder(tf.float32, [None, None, input_size], name='inputs')
     self.sequence_lengths = tf.placeholder(tf.int32, [None], name='sequence_lengths')
     self.labels = tf.sparse_placeholder(tf.int32, name='labels')
@@ -44,7 +45,7 @@ class Wav2LetterModel:
       # TODO Is stddev and constant a good choice?
       initial_filter = tf.truncated_normal([filter_width, input_channels, out_channels], stddev=0.1)
       filters = tf.Variable(initial_filter)
-      bias = tf.Variable(tf.constant(0.1, shape=[out_channels]))
+      bias = tf.Variable(tf.constant(0.0, shape=[out_channels]))
 
       # Apply convolution
       convolution_out = tf.nn.conv1d(value, filters, stride, 'SAME', use_cudnn_on_gpu=True)
@@ -71,7 +72,7 @@ class Wav2LetterModel:
 
       # Add non-linearity
       if apply_non_linearity:
-        convolution_out = tf.nn.tanh(convolution_out)
+        convolution_out = activation_fnc(convolution_out)
 
       return convolution_out, out_channels
 
