@@ -60,7 +60,7 @@ class Wav2LetterModel:
 
       with tf.name_scope('convolution_layer_{}'.format(convolution.layer_id)) as layer:
         # Filter and bias
-        initial_filter = tf.truncated_normal([filter_width, input_channels, out_channels], stddev=0.1)
+        initial_filter = tf.truncated_normal([filter_width, input_channels, out_channels], stddev=0.01)
         filters = tf.Variable(initial_filter, name='filters')
         bias = tf.Variable(tf.constant(0.0, shape=[out_channels]), name='bias')
 
