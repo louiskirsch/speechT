@@ -20,7 +20,7 @@ import numpy as np
 class Wav2LetterModel:
 
   def __init__(self, input_size, num_classes, learning_rate, learning_rate_decay_factor, max_gradient_norm,
-               log_dir, use_relu, run_name):
+               log_dir, use_relu, run_name, momentum):
     """
     Create a new Wav2Letter model
 
@@ -123,7 +123,7 @@ class Wav2LetterModel:
       self.cost = tf.nn.ctc_loss(self.logits, self.labels, self.sequence_lengths // 2)
       self.avg_loss = tf.reduce_mean(self.cost, name='average_loss')
       tf.scalar_summary('loss', self.avg_loss)
-      optimizer = tf.train.MomentumOptimizer(self.learning_rate, 0.9, name='optimizer')
+      optimizer = tf.train.MomentumOptimizer(self.learning_rate, momentum, name='optimizer')
       gvs = optimizer.compute_gradients(self.avg_loss)
       gradients, trainables = zip(*gvs)
       clipped_gradients, norm = tf.clip_by_global_norm(gradients, max_gradient_norm, name='clip_gradients')

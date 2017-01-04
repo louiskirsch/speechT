@@ -25,6 +25,7 @@ from preprocess import SpeechCorpusReader
 tf.app.flags.DEFINE_float("learning_rate", 1e-3, "Learning rate.")
 tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0.9,
                           "Learning rate decays by this much (multiplication).")
+tf.app.flags.DEFINE_float("momentum", 0.9, "Optimizer momentum")
 tf.app.flags.DEFINE_bool('disable_learning_rate_decay', False, 'Do not adapt the learning rate')
 tf.app.flags.DEFINE_float("max_gradient_norm", 5.0, "Clip gradients to this norm.")
 tf.app.flags.DEFINE_bool('relu', False, 'Use ReLU activation instead of tanh')
@@ -66,7 +67,8 @@ def create_model(session):
                           FLAGS.max_gradient_norm,
                           FLAGS.log_dir,
                           FLAGS.relu,
-                          FLAGS.run_name)
+                          FLAGS.run_name,
+                          FLAGS.momentum)
   ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
   if ckpt and tf.gfile.Exists(ckpt.model_checkpoint_path):
     print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
