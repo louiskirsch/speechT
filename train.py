@@ -25,6 +25,7 @@ from preprocess import SpeechCorpusReader
 tf.app.flags.DEFINE_float("learning_rate", 1e-3, "Learning rate.")
 tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0.9,
                           "Learning rate decays by this much (multiplication).")
+tf.app.flags.DEFINE_bool('disable_learning_rate_decay', False, 'Do not adapt the learning rate')
 tf.app.flags.DEFINE_float("max_gradient_norm", 5.0, "Clip gradients to this norm.")
 tf.app.flags.DEFINE_bool('relu', False, 'Use ReLU activation instead of tanh')
 tf.app.flags.DEFINE_integer("batch_size", 64,
@@ -136,7 +137,7 @@ def train():
         print('decoded: {}'.format(decoded_str))
 
         # Decrease learning rate if no improvement was seen over last 3 times.
-        if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
+        if not FLAGS.disable_learning_rate_decay and len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
           sess.run(model.learning_rate_decay_op)
         previous_losses.append(loss)
 
