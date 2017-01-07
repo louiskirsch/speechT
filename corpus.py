@@ -29,11 +29,13 @@ class SpeechCorpusProvider:
   DEV_CLEAN_SET = 'dev-clean'
   TRAIN_CLEAN_100_SET = 'train-clean-100'
   TRAIN_CLEAN_360_SET = 'train-clean-360'
+  TRAIN_OTHER_500_SET = 'train-other-500'
   TEST_CLEAN_SET = 'test-clean'
   DATA_SETS = {
     (DEV_DIR, DEV_CLEAN_SET),
     (TRAIN_DIR, TRAIN_CLEAN_100_SET),
     (TRAIN_DIR, TRAIN_CLEAN_360_SET),
+    (TRAIN_DIR, TRAIN_OTHER_500_SET),
     (TEST_DIR, TEST_CLEAN_SET)
   }
 
