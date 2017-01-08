@@ -12,11 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+from multiprocessing.pool import Pool
 
 import librosa
 import os
 
 import logging
+
+import multiprocessing
 import numpy as np
 import fnmatch
 import random
@@ -130,6 +133,16 @@ class SpeechCorpusReader:
 
     return transcript_dict
 
+  @classmethod
+  def _transform_sample(cls, audio_file):
+    audio_data, samplerate = librosa.load(audio_file)
+    audio_fragments = calc_mfccs(audio_data, samplerate)
+
+    file_name = os.path.basename(audio_file)
+    audio_id = os.path.splitext(file_name)[0]
+
+    return audio_id, audio_fragments
+
   def generate_samples(self, directory):
     """
     Generates samples from the given directory
@@ -139,18 +152,13 @@ class SpeechCorpusReader:
     """
     audio_files = list(iglob_recursive(self._data_directory + '/' + directory, '*.flac'))
 
-    transcript_dict = self._transcript_dict
+    with Pool(processes=multiprocessing.cpu_count()) as pool:
 
-    for audio_file in audio_files:
-      audio_data, samplerate = librosa.load(audio_file)
-      audio_fragments = calc_mfccs(audio_data, samplerate)
+      transcript_dict = self._transcript_dict
 
-      file_name = os.path.basename(audio_file)
-      audio_id = os.path.splitext(file_name)[0]
+      for audio_id, audio_fragments in pool.imap_unordered(SpeechCorpusReader._transform_sample, audio_files, chunksize=64):
+        yield audio_id, audio_fragments, transcript_dict[audio_id]
 
-      transcript = transcript_dict[audio_id]
-
-      yield audio_id, audio_fragments, transcript
 
   def store_samples(self, directory):
     """
@@ -206,7 +214,7 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser(
     description='Generate preprocessed file from audio files and transcripts')
   parser.add_argument('--data_directory', type=str, required=False, default='data',
-                      help='the data directory to pull the files from and store the preprocessed file')
+                      help='The data directory to pull the files from and store the preprocessed file')
   parser.add_argument('--all', required=False, default=False, action='store_true',
                       help='Preprocess training, test and development data')
   parser.add_argument('--train', required=False, default=False, action='store_true',
