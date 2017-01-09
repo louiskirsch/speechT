@@ -235,6 +235,9 @@ class SpeechCorpusReader:
 
     load_directory = self._get_directory(feature_type, directory)
 
+    if not os.path.exists(load_directory):
+      raise ValueError('Directory {} does not exist'.format(load_directory))
+
     files = list(iglob_recursive(load_directory, '*.npz'))
 
     if limit_count:

@@ -29,6 +29,7 @@ tf.app.flags.DEFINE_float("momentum", 0.9, "Optimizer momentum")
 tf.app.flags.DEFINE_bool('disable_learning_rate_decay', False, 'Do not adapt the learning rate')
 tf.app.flags.DEFINE_float("max_gradient_norm", 5.0, "Clip gradients to this norm.")
 tf.app.flags.DEFINE_bool('relu', False, 'Use ReLU activation instead of tanh')
+tf.app.flags.DEFINE_bool('power', False, 'Use a power spectrogram instead of mfccs as input')
 tf.app.flags.DEFINE_integer("batch_size", 64,
                             "Batch size to use during training.")
 tf.app.flags.DEFINE_string("data_dir", "data/", "Data directory")
@@ -41,8 +42,6 @@ tf.app.flags.DEFINE_integer("steps_per_checkpoint", 200,
                             "How many training steps to do per checkpoint.")
 
 FLAGS = tf.app.flags.FLAGS
-
-N_COEFFICIENTS = 13 * 3
 
 
 def extract_decoded_ids(sparse_tensor):
@@ -58,9 +57,9 @@ def extract_decoded_ids(sparse_tensor):
   yield ids
 
 
-def create_model(session):
+def create_model(session, input_size):
   """Create speechT model and initialize or load parameters in session."""
-  model = Wav2LetterModel(N_COEFFICIENTS,
+  model = Wav2LetterModel(input_size,
                           vocabulary.SIZE + 1,
                           FLAGS.learning_rate,
                           FLAGS.learning_rate_decay_factor,
@@ -86,16 +85,27 @@ def train():
     os.makedirs(FLAGS.train_dir)
 
   with tf.Session() as sess:
-    model = create_model(sess)
+
+    feature_type = 'power' if FLAGS.power else 'mfcc'
 
     reader = SpeechCorpusReader(FLAGS.data_dir)
+    sample_generator = reader.load_samples('train',
+                                           loop_infinitely=True,
+                                           limit_count=FLAGS.limit_training_set,
+                                           feature_type=feature_type)
+    dev_sample_generator = reader.load_samples('dev',
+                                               loop_infinitely=True,
+                                               feature_type=feature_type)
+
+    # Determine input size from first sample
+    input_size = next(sample_generator)[0].shape[1]
+
+    model = create_model(sess, input_size)
 
     def batch(iterable, batch_size):
       args = [iter(iterable)] * batch_size
       return zip(*args)
 
-    sample_generator = reader.load_samples('train', loop_infinitely=True, limit_count=FLAGS.limit_training_set)
-    dev_sample_generator = reader.load_samples('dev', loop_infinitely=True)
 
     step_time, loss = 0.0, 0.0
     current_step = 0
