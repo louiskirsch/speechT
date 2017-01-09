@@ -19,7 +19,7 @@ import time
 import os
 
 import vocabulary
-from wav2letter_model import Wav2LetterModel
+from speech_model import Wav2LetterModel
 from preprocess import SpeechCorpusReader
 
 tf.app.flags.DEFINE_float("learning_rate", 1e-3, "Learning rate.")

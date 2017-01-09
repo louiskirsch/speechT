@@ -15,14 +15,14 @@
 
 import tensorflow as tf
 import numpy as np
+import abc
 
 
-class Wav2LetterModel:
-
+class SpeechModel:
   def __init__(self, input_size, num_classes, learning_rate, learning_rate_decay_factor, max_gradient_norm,
                log_dir, use_relu, run_name, momentum):
     """
-    Create a new Wav2Letter model
+    Create a new speech model
 
     Args:
       input_size: the number of values per time step
@@ -34,8 +34,9 @@ class Wav2LetterModel:
       use_relu: if True, use relu instead of tanh
     """
     self.input_size = input_size
+    self.convolution_count = 0
 
-    activation_fnc = tf.nn.relu if use_relu else tf.nn.tanh
+    self.activation_fnc = tf.nn.relu if use_relu else tf.nn.tanh
 
     # Define input placeholders
     # inputs is of dimension [batch_size, max_time, input_size]
@@ -52,71 +53,11 @@ class Wav2LetterModel:
     # Variable summaries
     tf.scalar_summary('learning_rate', self.learning_rate)
 
-    def convolution(value, filter_width, stride, input_channels, out_channels, apply_non_linearity=True):
-      try:
-        convolution.layer_id += 1
-      except AttributeError:
-        convolution.layer_id = 1
-
-      with tf.name_scope('convolution_layer_{}'.format(convolution.layer_id)) as layer:
-        # Filter and bias
-        initial_filter = tf.truncated_normal([filter_width, input_channels, out_channels], stddev=0.01)
-        filters = tf.Variable(initial_filter, name='filters')
-        bias = tf.Variable(tf.constant(0.0, shape=[out_channels]), name='bias')
-
-        # Apply convolution
-        convolution_out = tf.nn.conv1d(value, filters, stride, 'SAME', use_cudnn_on_gpu=True, name='convolution')
-
-        # Create summary
-        with tf.name_scope('summaries'):
-          # add depth of 1 (=grayscale) leading to shape [filter_width, input_channels, 1, out_channels]
-          kernel_with_depth = tf.expand_dims(filters, 2)
-
-          # to tf.image_summary format [batch_size=out_channels, height=filter_width, width=input_channels, channels=1]
-          kernel_transposed = tf.transpose(kernel_with_depth, [3, 0, 1, 2])
-
-          # this will display random 3 filters from all the output channels
-          tf.image_summary(layer + 'filters', kernel_transposed, max_images=3)
-          tf.histogram_summary(layer + 'filters', filters)
-
-          tf.image_summary(layer + 'bias', tf.reshape(bias, [1, 1, out_channels, 1]))
-          tf.histogram_summary(layer + 'bias', bias)
-
-        # Add bias
-        convolution_out += bias
-
-        if apply_non_linearity:
-          # Add non-linearity
-          activations = activation_fnc(convolution_out, name='activation')
-          tf.histogram_summary(layer + 'activation', activations)
-          return activations, out_channels
-        else:
-          return convolution_out, out_channels
-
-    # The first layer scales up from input_size channels to 250 channels
-    # One striding layer of output size [batch_size, max_time / 2, 250]
-    outputs, channels = convolution(self.inputs, 48, 2, input_size, 250)
-
-    # 7 layers without striding of output size [batch_size, max_time / 2, 250]
-    for layer_idx in range(7):
-      outputs, channels = convolution(outputs, 7, 1, channels, channels)
-
-    # 1 layer with high kernel width and output size [batch_size, max_time / 2, 2000]
-    outputs, channels = convolution(outputs, 32, 1, channels, channels * 8)
-
-    # 1 fully connected layer of output size [batch_size, max_time / 2, 2000]
-    outputs, channels = convolution(outputs, 1, 1, channels, channels)
-
-    # 1 fully connected layer of output size [batch_size, max_time / 2, num_classes]
-    # We must not apply a non linearity in this last layer
-    outputs, channels = convolution(outputs, 1, 1, channels, num_classes, False)
-
-    # transpose logits to size [max_time / 2, batch_size, num_classes]
-    self.logits = tf.transpose(outputs, (1, 0, 2))
+    self.logits = self._create_network(num_classes)
 
     # Generate summary image for logits [batch_size=batch_size, height=num_classes, width=max_time / 2, channels=1]
-    tf.image_summary('logits', tf.expand_dims(tf.transpose(outputs, (0, 2, 1)), 3))
-    tf.histogram_summary('logits', outputs)
+    tf.image_summary('logits', tf.expand_dims(tf.transpose(self.logits, (1, 2, 0)), 3))
+    tf.histogram_summary('logits', self.logits)
 
     # Define loss and optimizer
     with tf.name_scope('training'):
@@ -147,6 +88,46 @@ class Wav2LetterModel:
       run_name += '_'
     self.train_writer = tf.train.SummaryWriter('{}/{}train'.format(log_dir, run_name))
     self.dev_writer = tf.train.SummaryWriter('{}/{}dev'.format(log_dir, run_name))
+
+  def _convolution(self, value, filter_width, stride, input_channels, out_channels, apply_non_linearity=True):
+
+    layer_id = self.convolution_count
+    self.convolution_count += 1
+
+    with tf.name_scope('convolution_layer_{}'.format(layer_id)) as layer:
+      # Filter and bias
+      initial_filter = tf.truncated_normal([filter_width, input_channels, out_channels], stddev=0.01)
+      filters = tf.Variable(initial_filter, name='filters')
+      bias = tf.Variable(tf.constant(0.0, shape=[out_channels]), name='bias')
+
+      # Apply convolution
+      convolution_out = tf.nn.conv1d(value, filters, stride, 'SAME', use_cudnn_on_gpu=True, name='convolution')
+
+      # Create summary
+      with tf.name_scope('summaries'):
+        # add depth of 1 (=grayscale) leading to shape [filter_width, input_channels, 1, out_channels]
+        kernel_with_depth = tf.expand_dims(filters, 2)
+
+        # to tf.image_summary format [batch_size=out_channels, height=filter_width, width=input_channels, channels=1]
+        kernel_transposed = tf.transpose(kernel_with_depth, [3, 0, 1, 2])
+
+        # this will display random 3 filters from all the output channels
+        tf.image_summary(layer + 'filters', kernel_transposed, max_images=3)
+        tf.histogram_summary(layer + 'filters', filters)
+
+        tf.image_summary(layer + 'bias', tf.reshape(bias, [1, 1, out_channels, 1]))
+        tf.histogram_summary(layer + 'bias', bias)
+
+      # Add bias
+      convolution_out += bias
+
+      if apply_non_linearity:
+        # Add non-linearity
+        activations = self.activation_fnc(convolution_out, name='activation')
+        tf.histogram_summary(layer + 'activation', activations)
+        return activations, out_channels
+      else:
+        return convolution_out, out_channels
 
   def init_session(self, sess, init_variables=True):
     """
@@ -248,3 +229,50 @@ class Wav2LetterModel:
       output_feed.append(self.merged_summaries)
 
     return sess.run(output_feed, feed_dict=input_feed)
+
+  @abc.abstractclassmethod
+  def _create_network(self, num_classes):
+    raise NotImplementedError()
+
+
+class Wav2LetterModel(SpeechModel):
+
+  def __init__(self, input_size, num_classes, learning_rate, learning_rate_decay_factor, max_gradient_norm, log_dir,
+               use_relu, run_name, momentum):
+    """
+    Create a new Wav2Letter model
+
+    Args:
+      input_size: the number of values per time step
+      num_classes: the number of output classes (vocabulary_size + 1 for blank label)
+      learning_rate: the inital learning rate
+      learning_rate_decay_factor: the factor to multiple the learning rate with when it should be decreased
+      max_gradient_norm: the maximum gradient norm to apply, otherwise clipping is applied
+      log_dir: the directory to log to for use of tensorboard
+      use_relu: if True, use relu instead of tanh
+
+    """
+    super().__init__(input_size, num_classes, learning_rate, learning_rate_decay_factor, max_gradient_norm, log_dir,
+                     use_relu, run_name, momentum)
+
+  def _create_network(self, num_classes):
+    # The first layer scales up from input_size channels to 250 channels
+    # One striding layer of output size [batch_size, max_time / 2, 250]
+    outputs, channels = self._convolution(self.inputs, 48, 2, self.input_size, 250)
+
+    # 7 layers without striding of output size [batch_size, max_time / 2, 250]
+    for layer_idx in range(7):
+      outputs, channels = self._convolution(outputs, 7, 1, channels, channels)
+
+    # 1 layer with high kernel width and output size [batch_size, max_time / 2, 2000]
+    outputs, channels = self._convolution(outputs, 32, 1, channels, channels * 8)
+
+    # 1 fully connected layer of output size [batch_size, max_time / 2, 2000]
+    outputs, channels = self._convolution(outputs, 1, 1, channels, channels)
+
+    # 1 fully connected layer of output size [batch_size, max_time / 2, num_classes]
+    # We must not apply a non linearity in this last layer
+    outputs, channels = self._convolution(outputs, 1, 1, channels, num_classes, False)
+
+    # transpose logits to size [max_time / 2, batch_size, num_classes]
+    return tf.transpose(outputs, (1, 0, 2))
