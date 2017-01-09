@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+from functools import partial
 from multiprocessing.pool import Pool
 
 import librosa
@@ -26,6 +27,35 @@ import random
 import vocabulary
 import corpus
 import argparse
+
+
+def normalize(values):
+  """
+  Normalize values to mean 0 and std 1
+  """
+  return (values - np.mean(values)) / np.std(values)
+
+
+def calc_power_spectrogram(audio_data, samplerate, n_mels=257, n_fft=400, hop_length=160):
+  """
+  Calculate power spectrogram from the given raw audio data
+
+  Args:
+    audio_data: numpyarray of raw audio wave
+    samplerate: the sample rate of the `audio_data`
+    n_mels: the number of mels to generate
+    n_fft: the window size of the fft
+    hop_length: the hop length for the window
+
+  Returns: the spectrogram in the form [time, n_mels]
+
+  """
+  spectrogram = librosa.feature.melspectrogram(audio_data, sr=samplerate, n_mels=n_mels, n_fft=n_fft, hop_length=hop_length)
+
+  # normalize
+  spectrogram = normalize(spectrogram)
+
+  return spectrogram.T
 
 
 def calc_mfccs(audio_data, samplerate, n_mfcc=13, n_fft=400, hop_length=160):
@@ -43,12 +73,6 @@ def calc_mfccs(audio_data, samplerate, n_mfcc=13, n_fft=400, hop_length=160):
 
   """
   mfcc = librosa.feature.mfcc(audio_data, sr=samplerate, n_mfcc=n_mfcc, n_fft=n_fft, hop_length=hop_length)
-
-  def normalize(values):
-    """
-    Normalize values to mean 0 and std 1
-    """
-    return (values - np.mean(values)) / np.std(values)
 
   # add derivatives and normalize
   mfcc_delta = librosa.feature.delta(mfcc)
@@ -134,21 +158,25 @@ class SpeechCorpusReader:
     return transcript_dict
 
   @classmethod
-  def _transform_sample(cls, audio_file):
+  def _transform_sample(cls, audio_file, process_fnc):
     audio_data, samplerate = librosa.load(audio_file)
-    audio_fragments = calc_mfccs(audio_data, samplerate)
+    audio_fragments = process_fnc(audio_data, samplerate)
 
     file_name = os.path.basename(audio_file)
     audio_id = os.path.splitext(file_name)[0]
 
     return audio_id, audio_fragments
 
-  def generate_samples(self, directory):
+  def generate_samples(self, directory, process_fnc):
     """
     Generates samples from the given directory
 
-    :param directory: the sub-directory of the initial data directory to sample from
-    :return: generator with (audio_id: string, audio_fragments: ndarray, transcript: list(int)) tuples
+    Args:
+      directory: the sub-directory of the initial data directory to sample from
+      process_fnc: the preprocessing function to use
+
+    Returns: generator with (audio_id: string, audio_fragments: ndarray, transcript: list(int)) tuples
+
     """
     audio_files = list(iglob_recursive(self._data_directory + '/' + directory, '*.flac'))
 
@@ -156,27 +184,41 @@ class SpeechCorpusReader:
 
       transcript_dict = self._transcript_dict
 
-      for audio_id, audio_fragments in pool.imap_unordered(SpeechCorpusReader._transform_sample, audio_files, chunksize=64):
+      tasks = pool.imap_unordered(partial(SpeechCorpusReader._transform_sample, process_fnc=process_fnc),
+                                  audio_files,
+                                  chunksize=64)
+
+      for audio_id, audio_fragments in tasks:
         yield audio_id, audio_fragments, transcript_dict[audio_id]
 
+  def _get_directory(self, feature_type, sub_directory):
+    preprocess_directory = 'preprocessed'
+    if feature_type == calc_power_spectrogram or feature_type == 'power':
+      preprocess_directory += '-power'
 
-  def store_samples(self, directory):
+    directory = self._data_directory + '/' + preprocess_directory + '/' + sub_directory
+
+    return directory
+
+  def store_samples(self, directory, process_fnc):
     """
     Read audio files from `directory` and store the preprocessed version in preprocessed/`directory`
 
     Args:
       directory: the sub-directory to read from
+      process_fnc: The preprocessing function to use
 
     """
 
-    out_directory = self._data_directory + '/preprocessed/' + directory
+    out_directory = self._get_directory(process_fnc, directory)
+
     if not os.path.exists(out_directory):
       os.makedirs(out_directory)
 
-    for audio_id, audio_fragments, transcript in self.generate_samples(directory):
+    for audio_id, audio_fragments, transcript in self.generate_samples(directory, process_fnc):
       np.savez(out_directory + '/' + audio_id, audio_fragments=audio_fragments, transcript=transcript)
 
-  def load_samples(self, directory, max_size=False, loop_infinitely=False, limit_count=0):
+  def load_samples(self, directory, max_size=False, loop_infinitely=False, limit_count=0, feature_type='mfcc'):
     """
     Load the preprocessed samples from `directory` and return an iterator
 
@@ -185,12 +227,13 @@ class SpeechCorpusReader:
       max_size: the maximum audio time length, all others are discarded (default: False)
       loop_infinitely: after one pass, shuffle and pass again (default: False)
       limit_count: maximum number of samples to use, 0 equals unlimited (default: 0)
+      feature_type: features to use 'mfcc' or 'power'
 
     Returns: iterator for samples (audio_data, transcript)
 
     """
 
-    load_directory = self._data_directory + '/preprocessed/' + directory
+    load_directory = self._get_directory(feature_type, directory)
 
     files = list(iglob_recursive(load_directory, '*.npz'))
 
@@ -223,6 +266,9 @@ if __name__ == '__main__':
                       help='Preprocess test data')
   parser.add_argument('--dev', required=False, default=False, action='store_true',
                       help='Preprocess development data')
+  parser.add_argument('--power-spectrogram', dest='process_fnc', action='store_const',
+                      const=calc_power_spectrogram, default=calc_mfccs,
+                      help='Generate power spectrograms instead of mfccs')
   args = parser.parse_args()
 
   if not(args.all or args.train or args.test or args.dev):
@@ -234,12 +280,12 @@ if __name__ == '__main__':
 
   if args.all or args.train:
     print('Preprocessing training data')
-    corpus_reader.store_samples('train')
+    corpus_reader.store_samples('train', args.process_fnc)
 
   if args.all or args.test:
     print('Preprocessing test data')
-    corpus_reader.store_samples('test')
+    corpus_reader.store_samples('test', args.process_fnc)
 
   if args.all or args.dev:
     print('Preprocessing development data')
-    corpus_reader.store_samples('dev')
+    corpus_reader.store_samples('dev', args.process_fnc)
