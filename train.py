@@ -80,13 +80,18 @@ def create_model(session, input_size):
 
 
 def train():
+  # Create training sub-directory if not specified otherwise
+  if FLAGS.run_name and FLAGS.train_dir == 'train/':
+    FLAGS.train_dir += FLAGS.run_name + '/'
+
+  # Determine feature type
+  feature_type = 'power' if FLAGS.power else 'mfcc'
+
   # Create training directory if it does not exist
   if not os.path.exists(FLAGS.train_dir):
     os.makedirs(FLAGS.train_dir)
 
   with tf.Session() as sess:
-
-    feature_type = 'power' if FLAGS.power else 'mfcc'
 
     reader = SpeechCorpusReader(FLAGS.data_dir)
     sample_generator = reader.load_samples('train',
