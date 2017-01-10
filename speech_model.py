@@ -90,6 +90,21 @@ class SpeechModel:
     self.dev_writer = tf.train.SummaryWriter('{}/{}dev'.format(log_dir, run_name))
 
   def _convolution(self, value, filter_width, stride, input_channels, out_channels, apply_non_linearity=True):
+    """
+    Apply a convolutional layer
+
+    Args:
+      value: the input tensor to apply the convolution on
+      filter_width: the width of the filter (kernel)
+      stride: the striding of the filter (kernel)
+      input_channels: the number if input channels
+      out_channels: the number of output channels
+      apply_non_linearity: whether to apply a non linearity
+
+    Returns:
+      the output after convolution, added biases and possible non linearity applied
+
+    """
 
     layer_id = self.convolution_count
     self.convolution_count += 1
@@ -119,7 +134,7 @@ class SpeechModel:
         tf.histogram_summary(layer + 'bias', bias)
 
       # Add bias
-      convolution_out += bias
+      convolution_out = tf.nn.bias_add(convolution_out, bias)
 
       if apply_non_linearity:
         # Add non-linearity
@@ -232,6 +247,16 @@ class SpeechModel:
 
   @abc.abstractclassmethod
   def _create_network(self, num_classes):
+    """
+    Should create the network producing the logits to then be used by the loss function
+
+    Args:
+      num_classes: specifies the number of classes to generate as logits
+
+    Returns:
+      the logits in the form [time, batch_size, num_classes]
+
+    """
     raise NotImplementedError()
 
 
