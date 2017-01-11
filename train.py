@@ -149,7 +149,7 @@ def train():
         print("validation average loss {:.2f} perplexity {:.2f}".format(avg_loss, perplexity))
         decoded_ids = next(extract_decoded_ids(decoded))
         decoded_str = vocabulary.ids_to_sentence(decoded_ids)
-        expected_str = vocabulary.ids_to_sentence(label_list[0])
+        expected_str = vocabulary.ids_to_sentence(label)
         print('expected: {}'.format(expected_str))
         print('decoded: {}'.format(decoded_str))
 
