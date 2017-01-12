@@ -52,10 +52,13 @@ def calc_power_spectrogram(audio_data, samplerate, n_mels=257, n_fft=400, hop_le
   """
   spectrogram = librosa.feature.melspectrogram(audio_data, sr=samplerate, n_mels=n_mels, n_fft=n_fft, hop_length=hop_length)
 
-  # normalize
-  spectrogram = normalize(spectrogram)
+  # convert to log scale (dB)
+  log_spectrogram = librosa.logamplitude(spectrogram, ref_power=np.max)
 
-  return spectrogram.T
+  # normalize
+  normalized_spectrogram = normalize(log_spectrogram)
+
+  return normalized_spectrogram.T
 
 
 def calc_mfccs(audio_data, samplerate, n_mfcc=13, n_fft=400, hop_length=160):
