@@ -19,6 +19,7 @@ import time
 import os
 
 import vocabulary
+from speech_input import InputBatchLoader
 from speech_model import Wav2LetterModel
 from preprocess import SpeechCorpusReader
 
@@ -57,9 +58,10 @@ def extract_decoded_ids(sparse_tensor):
   yield ids
 
 
-def create_model(session, input_size):
+def create_model(session, input_size, speech_input):
   """Create speechT model and initialize or load parameters in session."""
-  model = Wav2LetterModel(input_size,
+  model = Wav2LetterModel(speech_input,
+                          input_size,
                           vocabulary.SIZE + 1,
                           FLAGS.learning_rate,
                           FLAGS.learning_rate_decay_factor,
@@ -67,7 +69,8 @@ def create_model(session, input_size):
                           FLAGS.log_dir,
                           FLAGS.relu,
                           FLAGS.run_name,
-                          FLAGS.momentum)
+                          FLAGS.momentum,
+                          run_type='train')
   ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
   if ckpt and tf.gfile.Exists(ckpt.model_checkpoint_path):
     print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
@@ -98,72 +101,66 @@ def train():
                                            loop_infinitely=True,
                                            limit_count=FLAGS.limit_training_set,
                                            feature_type=feature_type)
-    dev_sample_generator = reader.load_samples('dev',
-                                               loop_infinitely=True,
-                                               feature_type=feature_type)
 
     # Determine input size from first sample
     input_size = next(sample_generator)[0].shape[1]
 
-    model = create_model(sess, input_size)
+    speech_input = InputBatchLoader(input_size, FLAGS.batch_size, sample_generator)
 
-    def batch(iterable, batch_size):
-      args = [iter(iterable)] * batch_size
-      return zip(*args)
+    model = create_model(sess, input_size, speech_input)
 
+    coord = tf.train.Coordinator()
+    tf.train.start_queue_runners(sess=sess, coord=coord)
+    speech_input.start_threads(sess=sess, coord=coord)
 
     step_time, loss = 0.0, 0.0
     current_step = 0
     previous_losses = []
 
-    for sample_batch in batch(sample_generator, FLAGS.batch_size):
-      input_list, label_list = zip(*sample_batch)
+    try:
+      while not coord.should_stop():
 
-      current_step += 1
-      is_checkpoint_step = current_step % FLAGS.steps_per_checkpoint == 0
+        current_step += 1
+        is_checkpoint_step = current_step % FLAGS.steps_per_checkpoint == 0
 
-      start_time = time.time()
-      step_result = model.step(sess, input_list, label_list, summary=is_checkpoint_step)
-      avg_loss = step_result[0]
-      step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
-      loss += avg_loss / FLAGS.steps_per_checkpoint
+        start_time = time.time()
+        step_result = model.step(sess, summary=is_checkpoint_step)
+        avg_loss = step_result[0]
+        step_time += (time.time() - start_time) / FLAGS.steps_per_checkpoint
+        loss += avg_loss / FLAGS.steps_per_checkpoint
 
-      # Once in a while, we save checkpoint, print statistics, and run evals.
-      if is_checkpoint_step:
-        global_step = model.global_step.eval()
+        # Once in a while, we save checkpoint and print statistics
+        if is_checkpoint_step:
+          global_step = model.global_step.eval()
 
-        # Print statistics for the previous epoch.
-        perplexity = np.exp(float(avg_loss)) if avg_loss < 300 else float("inf")
-        print("global step {:d} learning rate {:.4f} step-time {:.2f} average loss {:.2f} perplexity {:.2f}"
-              .format(global_step, model.learning_rate.eval(), step_time, avg_loss, perplexity))
+          # Print statistics for the previous epoch.
+          perplexity = np.exp(float(avg_loss)) if avg_loss < 300 else float("inf")
+          print("global step {:d} learning rate {:.4f} step-time {:.2f} average loss {:.2f} perplexity {:.2f}"
+                .format(global_step, model.learning_rate.eval(), step_time, avg_loss, perplexity))
 
-        # Retrieve and store summary
-        summary = step_result[2]
-        model.train_writer.add_summary(summary, global_step)
+          # Retrieve and store summary
+          summary = step_result[2]
+          model.summary_writer.add_summary(summary, global_step)
 
-        # Validate on development set and write summary
-        audio, label = next(dev_sample_generator)
-        avg_loss, decoded, summary = model.step(sess, [audio], [label], update=False, decode=True, summary=True)
-        model.dev_writer.add_summary(summary, global_step)
-        perplexity = np.exp(float(avg_loss)) if avg_loss < 300 else float("inf")
-        print("validation average loss {:.2f} perplexity {:.2f}".format(avg_loss, perplexity))
-        decoded_ids = next(extract_decoded_ids(decoded))
-        decoded_str = vocabulary.ids_to_sentence(decoded_ids)
-        expected_str = vocabulary.ids_to_sentence(label)
-        print('expected: {}'.format(expected_str))
-        print('decoded: {}'.format(decoded_str))
+          # Decrease learning rate if no improvement was seen over last 3 times.
+          if not FLAGS.disable_learning_rate_decay and len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
+            sess.run(model.learning_rate_decay_op)
+          previous_losses.append(loss)
 
-        # Decrease learning rate if no improvement was seen over last 3 times.
-        if not FLAGS.disable_learning_rate_decay and len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
-          sess.run(model.learning_rate_decay_op)
-        previous_losses.append(loss)
+          # Save checkpoint and zero timer and loss.
+          checkpoint_path = os.path.join(FLAGS.train_dir, "speechT.ckpt")
+          model.saver.save(sess, checkpoint_path, global_step=model.global_step)
+          print('Model saved')
+          step_time, loss = 0.0, 0.0
 
-        # Save checkpoint and zero timer and loss.
-        checkpoint_path = os.path.join(FLAGS.train_dir, "speechT.ckpt")
-        model.saver.save(sess, checkpoint_path, global_step=model.global_step)
-        print('Model saved')
-        step_time, loss = 0.0, 0.0
+    except tf.errors.OutOfRangeError:
+      print('Done training -- epoch limit reached')
+    finally:
+      # When done, ask the threads to stop.
+      coord.request_stop()
 
+    coord.join()
+    sess.close()
 
 
 def main(_):

@@ -14,17 +14,17 @@
 # ==============================================================================
 
 import tensorflow as tf
-import numpy as np
 import abc
 
 
 class SpeechModel:
-  def __init__(self, input_size, num_classes, learning_rate, learning_rate_decay_factor, max_gradient_norm,
-               log_dir, use_relu, run_name, momentum):
+  def __init__(self, input_loader, input_size, num_classes, learning_rate, learning_rate_decay_factor,
+               max_gradient_norm, log_dir, use_relu, run_name, momentum, run_type):
     """
     Create a new speech model
 
     Args:
+      input_loader: the object that provides input tensors
       input_size: the number of values per time step
       num_classes: the number of output classes (vocabulary_size + 1 for blank label)
       learning_rate: the inital learning rate
@@ -32,17 +32,17 @@ class SpeechModel:
       max_gradient_norm: the maximum gradient norm to apply, otherwise clipping is applied
       log_dir: the directory to log to for use of tensorboard
       use_relu: if True, use relu instead of tanh
+      run_name: the name of this run
+      momentum: the momentum parameter
+      run_type: "train", "dev" or "test"
     """
     self.input_size = input_size
     self.convolution_count = 0
 
     self.activation_fnc = tf.nn.relu if use_relu else tf.nn.tanh
 
-    # Define input placeholders
     # inputs is of dimension [batch_size, max_time, input_size]
-    self.inputs = tf.placeholder(tf.float32, [None, None, input_size], name='inputs')
-    self.sequence_lengths = tf.placeholder(tf.int32, [None], name='sequence_lengths')
-    self.labels = tf.sparse_placeholder(tf.int32, name='labels')
+    self.inputs, self.sequence_lengths, self.labels = input_loader.get_inputs()
 
     # Define non-trainables
     self.global_step = tf.Variable(0, trainable=False)
@@ -86,8 +86,7 @@ class SpeechModel:
     self.merged_summaries = tf.merge_all_summaries()
     if run_name:
       run_name += '_'
-    self.train_writer = tf.train.SummaryWriter('{}/{}train'.format(log_dir, run_name))
-    self.dev_writer = tf.train.SummaryWriter('{}/{}dev'.format(log_dir, run_name))
+    self.summary_writer = tf.train.SummaryWriter('{}/{}{}'.format(log_dir, run_name, run_type))
 
   def _convolution(self, value, filter_width, stride, input_channels, out_channels, apply_non_linearity=True):
     """
@@ -156,61 +155,14 @@ class SpeechModel:
     if init_variables:
       sess.run(self.init)
 
-    self.train_writer.add_graph(sess.graph)
-    self.dev_writer.add_graph(sess.graph)
+    self.summary_writer.add_graph(sess.graph)
 
-  def _get_inputs_feed_item(self, input_list):
-    """
-    Generate the tensor from `input_list` to feed into the network
-
-    Args:
-      input_list: a list of numpy arrays of shape [time, input_size]
-
-    Returns: tuple (input_tensor, sequence_lengths, max_time)
-
-    """
-    sequence_lengths = np.array([inp.shape[0] for inp in input_list])
-    max_time = sequence_lengths.max()
-    input_tensor = np.zeros((len(input_list), max_time, self.input_size))
-
-    # Fill input tensor
-    for idx, inp in enumerate(input_list):
-      input_tensor[idx, :inp.shape[0], :] = inp
-
-    return input_tensor, sequence_lengths, max_time
-
-  @staticmethod
-  def _get_labels_feed_item(label_list, max_time):
-    """
-    Generate the tensor from 'label_list' to feed as labels into the network
-
-    Args:
-      label_list: a list of encoded labels (ints)
-      max_time: the maximum time length of `label_list`
-
-    Returns: the SparseTensorValue to feed into the network
-
-    """
-
-    label_shape = np.array([len(label_list), max_time], dtype=np.int)
-    label_indices = []
-    label_values = []
-    for labelIdx, label in enumerate(label_list):
-      for idIdx, identifier in enumerate(label):
-        label_indices.append([labelIdx, idIdx])
-        label_values.append(identifier)
-    label_indices = np.array(label_indices, dtype=np.int)
-    label_values = np.array(label_values, dtype=np.int)
-    return tf.SparseTensorValue(label_indices, label_values, label_shape)
-
-  def step(self, sess, input_list, label_list, update=True, decode=False, summary=False):
+  def step(self, sess, update=True, decode=False, summary=False):
     """
     Evaluate the graph, you may update weights, decode audio or generate a summary
 
     Args:
       sess: tensorflow session
-      input_list: spectrogram inputs, list of Tensors [time, input_size]
-      label_list: identifiers from vocabulary, list of list of int32
       update: should the network be trained
       decode: should the decoding be performed and returned
       summary: should the summary be generated
@@ -218,21 +170,10 @@ class SpeechModel:
     Returns: avg_loss, decoded (optional), update (optional), summary (optional)
 
     """
-    if label_list is not None and len(input_list) != len(label_list):
-      raise ValueError('Input list must have same length as label list')
 
-    input_tensor, sequence_lengths, max_time = self._get_inputs_feed_item(input_list)
-
-    input_feed = {
-      self.inputs: input_tensor,
-      self.sequence_lengths: sequence_lengths,
-    }
-    output_feed = []
-
-    if label_list is not None:
-      labels = self._get_labels_feed_item(label_list, max_time)
-      input_feed[self.labels] = labels
-      output_feed.append(self.avg_loss)
+    output_feed = [
+      self.avg_loss
+    ]
 
     if decode:
       output_feed.append(self.decoded[0])
@@ -243,7 +184,7 @@ class SpeechModel:
     if summary:
       output_feed.append(self.merged_summaries)
 
-    return sess.run(output_feed, feed_dict=input_feed)
+    return sess.run(output_feed)
 
   @abc.abstractclassmethod
   def _create_network(self, num_classes):
@@ -262,12 +203,13 @@ class SpeechModel:
 
 class Wav2LetterModel(SpeechModel):
 
-  def __init__(self, input_size, num_classes, learning_rate, learning_rate_decay_factor, max_gradient_norm, log_dir,
-               use_relu, run_name, momentum):
+  def __init__(self, input_loader, input_size, num_classes, learning_rate, learning_rate_decay_factor,
+               max_gradient_norm, log_dir, use_relu, run_name, momentum, run_type):
     """
     Create a new Wav2Letter model
 
     Args:
+      input_loader: the object that provides input tensors
       input_size: the number of values per time step
       num_classes: the number of output classes (vocabulary_size + 1 for blank label)
       learning_rate: the inital learning rate
@@ -275,10 +217,13 @@ class Wav2LetterModel(SpeechModel):
       max_gradient_norm: the maximum gradient norm to apply, otherwise clipping is applied
       log_dir: the directory to log to for use of tensorboard
       use_relu: if True, use relu instead of tanh
+      run_name: the name of this run
+      momentum: the momentum parameter
+      run_type: "train", "dev" or "test"
 
     """
-    super().__init__(input_size, num_classes, learning_rate, learning_rate_decay_factor, max_gradient_norm, log_dir,
-                     use_relu, run_name, momentum)
+    super().__init__(input_loader, input_size, num_classes, learning_rate, learning_rate_decay_factor,
+                     max_gradient_norm, log_dir, use_relu, run_name, momentum, run_type)
 
   def _create_network(self, num_classes):
     # The first layer scales up from input_size channels to 250 channels
