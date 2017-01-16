@@ -45,19 +45,6 @@ tf.app.flags.DEFINE_integer("steps_per_checkpoint", 200,
 FLAGS = tf.app.flags.FLAGS
 
 
-def extract_decoded_ids(sparse_tensor):
-  ids = []
-  last_batch_id = 0
-  for i, index in enumerate(sparse_tensor.indices):
-    batch_id, char_id = index
-    if batch_id > last_batch_id:
-      yield ids
-      ids = []
-      last_batch_id = batch_id
-    ids.append(sparse_tensor.values[i])
-  yield ids
-
-
 def create_model(session, input_size, speech_input):
   """Create speechT model and initialize or load parameters in session."""
   model = Wav2LetterModel(speech_input,

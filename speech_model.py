@@ -157,7 +157,7 @@ class SpeechModel:
 
     self.summary_writer.add_graph(sess.graph)
 
-  def step(self, sess, update=True, decode=False, summary=False):
+  def step(self, sess, update=True, decode=False, return_label=False, summary=False):
     """
     Evaluate the graph, you may update weights, decode audio or generate a summary
 
@@ -165,9 +165,10 @@ class SpeechModel:
       sess: tensorflow session
       update: should the network be trained
       decode: should the decoding be performed and returned
+      return_label: should the label be returned
       summary: should the summary be generated
 
-    Returns: avg_loss, decoded (optional), update (optional), summary (optional)
+    Returns: avg_loss, decoded (optional), label (optional), update (optional), summary (optional)
 
     """
 
@@ -177,6 +178,9 @@ class SpeechModel:
 
     if decode:
       output_feed.append(self.decoded[0])
+
+    if return_label:
+      output_feed.append(self.labels)
 
     if update:
       output_feed.append(self.update)
