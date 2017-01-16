@@ -94,22 +94,26 @@ def train():
   if not os.path.exists(FLAGS.train_dir):
     os.makedirs(FLAGS.train_dir)
 
+  reader = SpeechCorpusReader(FLAGS.data_dir)
+
+  def create_sample_generator(limit_count=FLAGS.limit_training_set):
+    return reader.load_samples('train',
+                               loop_infinitely=True,
+                               limit_count=limit_count,
+                               feature_type=feature_type)
+
+  print('Determine input size from first sample')
+  input_size = next(create_sample_generator(limit_count=1))[0].shape[1]
+
+  print('Initialize InputBatchLoader')
+  speech_input = InputBatchLoader(input_size, FLAGS.batch_size, create_sample_generator)
+
   with tf.Session() as sess:
-
-    reader = SpeechCorpusReader(FLAGS.data_dir)
-    sample_generator = reader.load_samples('train',
-                                           loop_infinitely=True,
-                                           limit_count=FLAGS.limit_training_set,
-                                           feature_type=feature_type)
-
-    # Determine input size from first sample
-    input_size = next(sample_generator)[0].shape[1]
-
-    speech_input = InputBatchLoader(input_size, FLAGS.batch_size, sample_generator)
 
     model = create_model(sess, input_size, speech_input)
 
     coord = tf.train.Coordinator()
+    print('Starting input pipeline')
     tf.train.start_queue_runners(sess=sess, coord=coord)
     speech_input.start_threads(sess=sess, coord=coord)
 
@@ -118,6 +122,7 @@ def train():
     previous_losses = []
 
     try:
+      print('Begin training')
       while not coord.should_stop():
 
         current_step += 1

@@ -15,6 +15,7 @@
 from abc import abstractmethod
 
 import tensorflow as tf
+import threading
 import numpy as np
 
 
@@ -77,11 +78,11 @@ class InputBatchLoader(BaseInputLoader):
   This class manages the the background threads needed to fill a queue full of data.
   """
 
-  def __init__(self, input_size, batch_size, data_generator):
+  def __init__(self, input_size, batch_size, data_generator_creator):
 
     super().__init__(input_size)
     self.batch_size = batch_size
-    self.data_generator = data_generator
+    self.data_generator_creator = data_generator_creator
 
     with tf.device("/cpu:0"):
       # Define input and label placeholders
@@ -91,13 +92,15 @@ class InputBatchLoader(BaseInputLoader):
       self.labels = tf.sparse_placeholder(tf.int32, name='labels')
 
       # Queue for inputs and labels
-      self.queue = tf.FIFOQueue(shapes=[[batch_size, None, input_size], [batch_size], []],
-                                dtypes=[tf.float32, tf.int32, tf.int32],
+      self.queue = tf.FIFOQueue(dtypes=[tf.float32, tf.int32, tf.string],
                                 capacity=50)
+
+      # queues do not support sparse tensors yet, we need to serialize...
+      serialized_labels = tf.serialize_sparse(self.labels)
 
       self.enqueue_op = self.queue.enqueue([self.inputs,
                                             self.sequence_lengths,
-                                            self.labels])
+                                            serialized_labels])
 
   def get_inputs(self):
     """
@@ -105,6 +108,9 @@ class InputBatchLoader(BaseInputLoader):
     """
     with tf.device("/cpu:0"):
       inputs, sequence_lengths, labels = self.queue.dequeue()
+      # there is no deserialize for a single sparse tensor ... workaround required
+      labels = tf.deserialize_many_sparse(tf.expand_dims(labels, 0), dtype=tf.int32)
+      labels = tf.sparse_reshape(labels, [self.batch_size, -1])
     return inputs, sequence_lengths, labels
 
   def _batch(self, iterable):
@@ -123,7 +129,9 @@ class InputBatchLoader(BaseInputLoader):
     """
     Function run on alternate thread. Basically, keep adding data to the queue.
     """
-    for sample_batch in self._batch(self.data_generator):
+    data_generator = self.data_generator_creator()
+
+    for sample_batch in self._batch(data_generator):
       input_list, label_list = zip(*sample_batch)
 
       input_tensor, sequence_lengths, max_time = self._get_inputs_feed_item(input_list)
@@ -142,7 +150,7 @@ class InputBatchLoader(BaseInputLoader):
     """ Start background threads to feed queue """
     threads = []
     for n in range(n_threads):
-      t = tf.threading.Thread(target=self._enqueue, args=(sess, coord))
+      t = threading.Thread(target=self._enqueue, args=(sess, coord))
       t.daemon = True  # thread will close when parent quits
       t.start()
       coord.register_thread(t)
