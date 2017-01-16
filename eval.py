@@ -29,7 +29,7 @@ tf.app.flags.DEFINE_string("data_dir", "data/", "Data directory")
 tf.app.flags.DEFINE_string("train_dir", "train/", "Training directory")
 tf.app.flags.DEFINE_string("log_dir", "log/", "Logging directory for summaries")
 tf.app.flags.DEFINE_string("run_name", "", "Give this training a name to appear in tensorboard")
-tf.app.flags.DEFINE_integer("count", 64, "Number of samples to evaluate")
+tf.app.flags.DEFINE_integer("epoch_count", 1, "Number of epochs to evaluate")
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -80,7 +80,7 @@ def evaluate():
 
   reader = SpeechCorpusReader(FLAGS.data_dir)
 
-  def create_sample_generator(limit_count=FLAGS.count):
+  def create_sample_generator(limit_count=FLAGS.epoch_count * FLAGS.batch_size):
     return reader.load_samples('dev',
                                loop_infinitely=False,
                                limit_count=limit_count,
@@ -90,7 +90,7 @@ def evaluate():
   input_size = next(create_sample_generator(limit_count=1))[0].shape[1]
 
   print('Initialize InputBatchLoader')
-  speech_input = InputBatchLoader(input_size, FLAGS.batch_size, create_sample_generator)
+  speech_input = InputBatchLoader(input_size, FLAGS.batch_size, create_sample_generator, FLAGS.epoch_count)
 
   with tf.Session() as sess:
 
@@ -103,7 +103,9 @@ def evaluate():
 
     try:
       print('Begin evaluation')
-      while not coord.should_stop():
+      for epoch in range(FLAGS.epoch_count):
+        if coord.should_stop():
+          break
 
         global_step = model.global_step.eval()
 
