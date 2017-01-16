@@ -96,7 +96,7 @@ class InputBatchLoader(BaseInputLoader):
                                 capacity=50)
 
       # queues do not support sparse tensors yet, we need to serialize...
-      serialized_labels = tf.serialize_sparse(self.labels)
+      serialized_labels = tf.serialize_many_sparse(self.labels)
 
       self.enqueue_op = self.queue.enqueue([self.inputs,
                                             self.sequence_lengths,
@@ -108,9 +108,7 @@ class InputBatchLoader(BaseInputLoader):
     """
     with tf.device("/cpu:0"):
       inputs, sequence_lengths, labels = self.queue.dequeue()
-      # there is no deserialize for a single sparse tensor ... workaround required
-      labels = tf.deserialize_many_sparse(tf.expand_dims(labels, 0), dtype=tf.int32)
-      labels = tf.sparse_reshape(labels, [self.batch_size, -1])
+      labels = tf.deserialize_many_sparse(labels, dtype=tf.int32)
     return inputs, sequence_lengths, labels
 
   def _batch(self, iterable):
