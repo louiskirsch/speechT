@@ -92,5 +92,5 @@ ENV/
 .idea/
 
 # Data
-data/
-train/
+./data/
+./train/

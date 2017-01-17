@@ -161,38 +161,43 @@ class SpeechCorpusReader:
     return transcript_dict
 
   @classmethod
-  def _transform_sample(cls, audio_file, process_fnc):
-    audio_data, samplerate = librosa.load(audio_file)
-    audio_fragments = process_fnc(audio_data, samplerate)
-
+  def _extract_audio_id(cls, audio_file):
     file_name = os.path.basename(audio_file)
     audio_id = os.path.splitext(file_name)[0]
 
+    return audio_id
+
+  @classmethod
+  def _transform_sample(cls, audio_file, preprocess_fnc):
+    audio_data, samplerate = librosa.load(audio_file)
+    audio_fragments = preprocess_fnc(audio_data, samplerate)
+    audio_id = cls._extract_audio_id(audio_file)
+
     return audio_id, audio_fragments
 
-  def generate_samples(self, directory, process_fnc):
+  @classmethod
+  def _transform_and_store_sample(cls, audio_file, preprocess_fnc, transcript, out_directory):
+    audio_id, audio_fragments = cls._transform_sample(audio_file, preprocess_fnc)
+    np.savez(out_directory + '/' + audio_id, audio_fragments=audio_fragments, transcript=transcript)
+
+  def generate_samples(self, directory, preprocess_fnc):
     """
     Generates samples from the given directory
 
     Args:
       directory: the sub-directory of the initial data directory to sample from
-      process_fnc: the preprocessing function to use
+      preprocess_fnc: the preprocessing function to use
 
     Returns: generator with (audio_id: string, audio_fragments: ndarray, transcript: list(int)) tuples
 
     """
     audio_files = list(iglob_recursive(self._data_directory + '/' + directory, '*.flac'))
 
-    with Pool(processes=multiprocessing.cpu_count()) as pool:
+    transcript_dict = self._transcript_dict
 
-      transcript_dict = self._transcript_dict
-
-      tasks = pool.imap_unordered(partial(SpeechCorpusReader._transform_sample, process_fnc=process_fnc),
-                                  audio_files,
-                                  chunksize=64)
-
-      for audio_id, audio_fragments in tasks:
-        yield audio_id, audio_fragments, transcript_dict[audio_id]
+    for audio_file in audio_files:
+      audio_id, audio_fragments = self._transform_sample(audio_file, preprocess_fnc)
+      yield audio_id, audio_fragments, transcript_dict[audio_id]
 
   def _get_directory(self, feature_type, sub_directory):
     preprocess_directory = 'preprocessed'
@@ -203,23 +208,35 @@ class SpeechCorpusReader:
 
     return directory
 
-  def store_samples(self, directory, process_fnc):
+  def store_samples(self, directory, preprocess_fnc):
     """
     Read audio files from `directory` and store the preprocessed version in preprocessed/`directory`
 
     Args:
       directory: the sub-directory to read from
-      process_fnc: The preprocessing function to use
+      preprocess_fnc: The preprocessing function to use
 
     """
 
-    out_directory = self._get_directory(process_fnc, directory)
+    out_directory = self._get_directory(preprocess_fnc, directory)
 
     if not os.path.exists(out_directory):
       os.makedirs(out_directory)
 
-    for audio_id, audio_fragments, transcript in self.generate_samples(directory, process_fnc):
-      np.savez(out_directory + '/' + audio_id, audio_fragments=audio_fragments, transcript=transcript)
+    audio_files = list(iglob_recursive(self._data_directory + '/' + directory, '*.flac'))
+
+    with Pool(processes=multiprocessing.cpu_count()) as pool:
+
+      transcript_dict = self._transcript_dict
+
+      for audio_file in audio_files:
+        audio_id = self._extract_audio_id(audio_file)
+        transcript_entry = transcript_dict[audio_id]
+        transform_args = (audio_file, preprocess_fnc, transcript_entry, out_directory)
+        pool.apply_async(SpeechCorpusReader._transform_and_store_sample, transform_args)
+
+      pool.close()
+      pool.join()
 
   def load_samples(self, directory, max_size=False, loop_infinitely=False, limit_count=0, feature_type='mfcc'):
     """
@@ -272,7 +289,7 @@ if __name__ == '__main__':
                       help='Preprocess test data')
   parser.add_argument('--dev', required=False, default=False, action='store_true',
                       help='Preprocess development data')
-  parser.add_argument('--power-spectrogram', dest='process_fnc', action='store_const',
+  parser.add_argument('--power-spectrogram', dest='preprocess_fnc', action='store_const',
                       const=calc_power_spectrogram, default=calc_mfccs,
                       help='Generate power spectrograms instead of mfccs')
   args = parser.parse_args()
@@ -286,12 +303,12 @@ if __name__ == '__main__':
 
   if args.all or args.train:
     print('Preprocessing training data')
-    corpus_reader.store_samples('train', args.process_fnc)
+    corpus_reader.store_samples('train', args.preprocess_fnc)
 
   if args.all or args.test:
     print('Preprocessing test data')
-    corpus_reader.store_samples('test', args.process_fnc)
+    corpus_reader.store_samples('test', args.preprocess_fnc)
 
   if args.all or args.dev:
     print('Preprocessing development data')
-    corpus_reader.store_samples('dev', args.process_fnc)
+    corpus_reader.store_samples('dev', args.preprocess_fnc)
