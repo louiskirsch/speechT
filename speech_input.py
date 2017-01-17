@@ -94,7 +94,7 @@ class InputBatchLoader(BaseInputLoader):
 
       # Queue for inputs and labels
       self.queue = tf.FIFOQueue(dtypes=[tf.float32, tf.int32, tf.string],
-                                capacity=50)
+                                capacity=100)
 
       # queues do not support sparse tensors yet, we need to serialize...
       serialized_labels = tf.serialize_many_sparse(self.labels)

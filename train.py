@@ -102,7 +102,7 @@ def train():
     coord = tf.train.Coordinator()
     print('Starting input pipeline')
     tf.train.start_queue_runners(sess=sess, coord=coord)
-    speech_input.start_threads(sess=sess, coord=coord)
+    speech_input.start_threads(sess=sess, coord=coord, n_threads=2)
 
     step_time, loss = 0.0, 0.0
     current_step = 0
