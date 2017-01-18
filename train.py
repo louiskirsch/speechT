@@ -19,11 +19,12 @@ import time
 import os
 
 import vocabulary
-from speech_input import InputBatchLoader
-from speech_model import Wav2LetterModel
+from speech_input import InputBatchLoader, BaseInputLoader
+from speech_model import Wav2LetterModel, SpeechModel
 from preprocess import SpeechCorpusReader
 
 tf.app.flags.DEFINE_float("learning_rate", 1e-3, "Learning rate.")
+tf.app.flags.DEFINE_bool("reset_learning_rate", False, "Reset the learning rate to the default or provided value")
 tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0.9,
                           "Learning rate decays by this much (multiplication).")
 tf.app.flags.DEFINE_float("momentum", 0.9, "Optimizer momentum")
@@ -45,7 +46,7 @@ tf.app.flags.DEFINE_integer("steps_per_checkpoint", 200,
 FLAGS = tf.app.flags.FLAGS
 
 
-def create_model(session, input_size, speech_input):
+def create_model(session: tf.Session, input_size: int, speech_input: BaseInputLoader) -> SpeechModel:
   """Create speechT model and initialize or load parameters in session."""
   model = Wav2LetterModel(speech_input,
                           input_size,
@@ -63,6 +64,8 @@ def create_model(session, input_size, speech_input):
     print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
     model.saver.restore(session, ckpt.model_checkpoint_path)
     model.init_session(session, init_variables=False)
+    if FLAGS.reset_learning_rate:
+      session.run(model.learning_rate.assign(FLAGS.learning_rate))
   else:
     print("Created model with fresh parameters.")
     model.init_session(session, init_variables=True)
