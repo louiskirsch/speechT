@@ -259,12 +259,12 @@ class SpeechCorpusReader:
       raise ValueError('Directory {} does not exist'.format(load_directory))
 
     files = list(iglob_recursive(load_directory, '*.npz'))
+    random.shuffle(files)
 
     if limit_count:
       files = files[:limit_count]
 
     while True:
-      random.shuffle(files)
       for file in files:
         with np.load(file) as data:
           audio_length = data['audio_fragments'].shape[0]
@@ -274,6 +274,7 @@ class SpeechCorpusReader:
             logging.warning('Audio snippet too long: {}'.format(audio_length))
       if not loop_infinitely:
         break
+      random.shuffle(files)
 
 
 if __name__ == '__main__':
