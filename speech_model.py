@@ -47,23 +47,22 @@ class SpeechModel:
     # Define non-trainables
     self.global_step = tf.Variable(0, trainable=False)
     self.learning_rate = tf.Variable(float(learning_rate), trainable=False, dtype=tf.float32, name='learning_rate')
-    self.learning_rate_decay_op = self.learning_rate.assign(
-                                   tf.mul(self.learning_rate, learning_rate_decay_factor, name='learning_rate_decay'))
+    self.learning_rate_decay_op = self.learning_rate.assign(learning_rate_decay_factor * self.learning_rate)
 
     # Variable summaries
-    tf.scalar_summary('learning_rate', self.learning_rate)
+    tf.summary.scalar('learning_rate', self.learning_rate)
 
     self.logits = self._create_network(num_classes)
 
     # Generate summary image for logits [batch_size=batch_size, height=num_classes, width=max_time / 2, channels=1]
-    tf.image_summary('logits', tf.expand_dims(tf.transpose(self.logits, (1, 2, 0)), 3))
-    tf.histogram_summary('logits', self.logits)
+    tf.summary.image('logits', tf.expand_dims(tf.transpose(self.logits, (1, 2, 0)), 3))
+    tf.summary.histogram('logits', self.logits)
 
     # Define loss and optimizer
     with tf.name_scope('training'):
       self.cost = tf.nn.ctc_loss(self.logits, self.labels, self.sequence_lengths // 2)
       self.avg_loss = tf.reduce_mean(self.cost, name='average_loss')
-      tf.scalar_summary('loss', self.avg_loss)
+      tf.summary.scalar('loss', self.avg_loss)
       optimizer = tf.train.MomentumOptimizer(self.learning_rate, momentum, name='optimizer')
       gvs = optimizer.compute_gradients(self.avg_loss)
       gradients, trainables = zip(*gvs)
@@ -77,16 +76,16 @@ class SpeechModel:
       self.decoded, self.log_probabilities = tf.nn.ctc_greedy_decoder(self.logits, self.sequence_lengths // 2)
 
     # Initializing the variables
-    self.init = tf.initialize_all_variables()
+    self.init = tf.global_variables_initializer()
 
     # Create saver
-    self.saver = tf.train.Saver(tf.all_variables())
+    self.saver = tf.train.Saver(tf.global_variables())
 
     # Create summary writers
-    self.merged_summaries = tf.merge_all_summaries()
+    self.merged_summaries = tf.summary.merge_all()
     if run_name:
       run_name += '_'
-    self.summary_writer = tf.train.SummaryWriter('{}/{}{}'.format(log_dir, run_name, run_type))
+    self.summary_writer = tf.summary.FileWriter('{}/{}{}'.format(log_dir, run_name, run_type))
 
   def _convolution(self, value, filter_width, stride, input_channels, out_channels, apply_non_linearity=True):
     """
@@ -126,11 +125,11 @@ class SpeechModel:
         kernel_transposed = tf.transpose(kernel_with_depth, [3, 0, 1, 2])
 
         # this will display random 3 filters from all the output channels
-        tf.image_summary(layer + 'filters', kernel_transposed, max_images=3)
-        tf.histogram_summary(layer + 'filters', filters)
+        tf.summary.image(layer + 'filters', kernel_transposed, max_outputs=3)
+        tf.summary.histogram(layer + 'filters', filters)
 
-        tf.image_summary(layer + 'bias', tf.reshape(bias, [1, 1, out_channels, 1]))
-        tf.histogram_summary(layer + 'bias', bias)
+        tf.summary.image(layer + 'bias', tf.reshape(bias, [1, 1, out_channels, 1]))
+        tf.summary.histogram(layer + 'bias', bias)
 
       # Add bias
       convolution_out = tf.nn.bias_add(convolution_out, bias)
@@ -138,7 +137,7 @@ class SpeechModel:
       if apply_non_linearity:
         # Add non-linearity
         activations = self.activation_fnc(convolution_out, name='activation')
-        tf.histogram_summary(layer + 'activation', activations)
+        tf.summary.histogram(layer + 'activation', activations)
         return activations, out_channels
       else:
         return convolution_out, out_channels
