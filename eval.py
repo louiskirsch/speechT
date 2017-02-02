@@ -119,11 +119,16 @@ def evaluate():
 
         perplexity = np.exp(float(avg_loss)) if avg_loss < 300 else float("inf")
         print("validation average loss {:.2f} perplexity {:.2f}".format(avg_loss, perplexity))
-        for decoded_ids, label_ids in zip(extract_decoded_ids(decoded), extract_decoded_ids(label)):
-          decoded_str = vocabulary.ids_to_sentence(decoded_ids)
+
+        # Print decode
+        decoded_ids_paths = [extract_decoded_ids(path) for path in decoded]
+        for label_ids in extract_decoded_ids(label):
           expected_str = vocabulary.ids_to_sentence(label_ids)
           print('expected: {}'.format(expected_str))
-          print('decoded: {}'.format(decoded_str))
+          for decoded_path in decoded_ids_paths:
+            decoded_ids = next(decoded_path)
+            decoded_str = vocabulary.ids_to_sentence(decoded_ids)
+            print('decoded: {}'.format(decoded_str))
 
     except tf.errors.OutOfRangeError:
       print('Done evaluating -- epoch limit reached')

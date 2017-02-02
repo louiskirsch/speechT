@@ -72,8 +72,11 @@ class SpeechModel:
 
     # Decoding
     with tf.name_scope('decoding'):
-      # TODO use beam search here later
-      self.decoded, self.log_probabilities = tf.nn.ctc_greedy_decoder(self.logits, self.sequence_lengths // 2)
+      self.decoded, self.log_probabilities = tf.nn.ctc_beam_search_decoder(self.logits,
+                                                                           self.sequence_lengths // 2,
+                                                                           kenlm_file_path='gigaword.binary',
+                                                                           beam_width=1000,
+                                                                           top_paths=1)
 
     # Initializing the variables
     self.init = tf.global_variables_initializer()
@@ -176,7 +179,7 @@ class SpeechModel:
     ]
 
     if decode:
-      output_feed.append(self.decoded[0])
+      output_feed.append(self.decoded)
 
     if return_label:
       output_feed.append(self.labels)
