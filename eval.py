@@ -23,6 +23,7 @@ from preprocess import SpeechCorpusReader
 
 tf.app.flags.DEFINE_bool('relu', False, 'Use ReLU activation instead of tanh')
 tf.app.flags.DEFINE_bool('power', False, 'Use a power spectrogram instead of mfccs as input')
+tf.app.flags.DEFINE_bool('no_save', False, 'Do not save evaluation')
 tf.app.flags.DEFINE_integer("batch_size", 64,
                             "Batch size to use during evaluation.")
 tf.app.flags.DEFINE_string("data_dir", "data/", "Data directory")
@@ -110,8 +111,12 @@ def evaluate():
         global_step = model.global_step.eval()
 
         # Validate on development set and write summary
-        avg_loss, decoded, label, summary = model.step(sess, update=False, decode=True, return_label=True, summary=True)
-        model.summary_writer.add_summary(summary, global_step)
+        if FLAGS.no_save:
+          avg_loss, decoded, label = model.step(sess, update=False, decode=True, return_label=True)
+        else:
+          avg_loss, decoded, label, summary = model.step(sess, update=False, decode=True, return_label=True, summary=True)
+          model.summary_writer.add_summary(summary, global_step)
+
         perplexity = np.exp(float(avg_loss)) if avg_loss < 300 else float("inf")
         print("validation average loss {:.2f} perplexity {:.2f}".format(avg_loss, perplexity))
         for decoded_ids, label_ids in zip(extract_decoded_ids(decoded), extract_decoded_ids(label)):
