@@ -121,7 +121,7 @@ def evaluate():
         global_step = model.global_step.eval()
 
         # Validate on development set and write summary
-        if FLAGS.no_save:
+        if FLAGS.no_save or epoch > 0:
           avg_loss, decoded, label = model.step(sess, update=False, decode=True, return_label=True)
         else:
           avg_loss, decoded, label, summary = model.step(sess, update=False, decode=True, return_label=True, summary=True)
