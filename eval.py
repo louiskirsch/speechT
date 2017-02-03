@@ -17,6 +17,7 @@ import tensorflow as tf
 import numpy as np
 
 import vocabulary
+import editdistance
 from speech_input import InputBatchLoader
 from speech_model import Wav2LetterModel
 from preprocess import SpeechCorpusReader
@@ -106,6 +107,13 @@ def evaluate():
 
     try:
       print('Begin evaluation')
+
+      decodings_counter = 0
+      global_letter_edit_distance = 0
+      global_letter_error_rate = 0
+      global_word_edit_distance = 0
+      global_word_error_rate = 0
+
       for epoch in range(FLAGS.epoch_count):
         if coord.should_stop():
           break
@@ -132,6 +140,30 @@ def evaluate():
             decoded_str = vocabulary.ids_to_sentence(decoded_ids)
             print('decoded: {}'.format(decoded_str))
 
+            letter_edit_distance = editdistance.eval(expected_str, decoded_str)
+            letter_error_rate = letter_edit_distance / len(expected_str)
+            word_edit_distance = editdistance.eval(expected_str.split(), decoded_str.split())
+            word_error_rate = word_edit_distance / len(expected_str.split())
+            global_letter_edit_distance += letter_edit_distance
+            global_letter_error_rate += letter_error_rate
+            global_word_edit_distance += word_edit_distance
+            global_word_error_rate += global_word_error_rate
+            decodings_counter += 1
+
+            print('LED: {} LER: {:.2f} WED: {} WER: {:.2f}'.format(letter_edit_distance,
+                                                                   letter_error_rate,
+                                                                   word_edit_distance,
+                                                                   word_error_rate))
+
+      print('Global statistics')
+      global_letter_edit_distance /= decodings_counter
+      global_letter_error_rate /= decodings_counter
+      global_word_edit_distance /= decodings_counter
+      global_word_error_rate /= decodings_counter
+      print('LED: {} LER: {:.2f} WED: {} WER: {:.2f}'.format(global_letter_edit_distance,
+                                                             global_letter_error_rate,
+                                                             global_word_edit_distance,
+                                                             global_word_error_rate))
     except tf.errors.OutOfRangeError:
       print('Done evaluating -- epoch limit reached')
     finally:
