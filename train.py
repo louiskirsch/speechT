@@ -25,12 +25,11 @@ from preprocess import SpeechCorpusReader
 
 tf.app.flags.DEFINE_float("learning_rate", 1e-3, "Learning rate.")
 tf.app.flags.DEFINE_bool("reset_learning_rate", False, "Reset the learning rate to the default or provided value")
-tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0.9,
-                          "Learning rate decays by this much (multiplication).")
+tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0,
+                          "Enable learning rate decay, decays by the given factor.")
 tf.app.flags.DEFINE_float("momentum", 0.9, "Optimizer momentum")
-tf.app.flags.DEFINE_bool('disable_learning_rate_decay', False, 'Do not adapt the learning rate')
 tf.app.flags.DEFINE_float("max_gradient_norm", 5.0, "Clip gradients to this norm.")
-tf.app.flags.DEFINE_bool('relu', False, 'Use ReLU activation instead of tanh')
+tf.app.flags.DEFINE_bool('relu', True, 'Use ReLU activation instead of tanh')
 tf.app.flags.DEFINE_bool('power', False, 'Use a power spectrogram instead of mfccs as input')
 tf.app.flags.DEFINE_integer("batch_size", 64,
                             "Batch size to use during training.")
@@ -40,7 +39,7 @@ tf.app.flags.DEFINE_string("log_dir", "log/", "Logging directory for summaries")
 tf.app.flags.DEFINE_string("run_name", "", "Give this training a name to appear in tensorboard")
 tf.app.flags.DEFINE_integer("limit_training_set", 0,
                             "Train on a smaller training set, limited to the specified size")
-tf.app.flags.DEFINE_integer("steps_per_checkpoint", 200,
+tf.app.flags.DEFINE_integer("steps_per_checkpoint", 1000,
                             "How many training steps to do per checkpoint.")
 
 FLAGS = tf.app.flags.FLAGS
@@ -138,7 +137,7 @@ def train():
           model.summary_writer.add_summary(summary, global_step)
 
           # Decrease learning rate if no improvement was seen over last 3 times.
-          if not FLAGS.disable_learning_rate_decay and len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
+          if FLAGS.learning_rate_decay_factor > 0 and len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
             sess.run(model.learning_rate_decay_op)
           previous_losses.append(loss)
 
