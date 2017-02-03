@@ -1,7 +1,5 @@
 # Copyright 2016 Louis Kirsch. All Rights Reserved.
 #
-# based on http://stackoverflow.com/questions/892199/detect-record-audio-in-python
-#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -15,110 +13,94 @@
 # limitations under the License.
 # ==============================================================================
 
-from sys import byteorder
-from array import array
+import tensorflow as tf
+import numpy as np
 
-import pyaudio
+import eval_utils
+import preprocess
+import vocabulary
 
-class AudioRecorder:
+from record_utils import AudioRecorder
+from speech_input import SingleInputLoader
+from speech_model import Wav2LetterModel
 
-  def __init__(self, rate=16000, threshold=0.03, chunk_size=1024):
-    self.rate = rate
-    self.threshold = threshold
-    self.chunk_size = chunk_size
-    self.format = pyaudio.paFloat32
-    self._pyaudio = pyaudio.PyAudio()
+tf.app.flags.DEFINE_bool('relu', True, 'Use ReLU activation instead of tanh')
+tf.app.flags.DEFINE_bool('power', False, 'Use a power spectrogram instead of mfccs as input')
+tf.app.flags.DEFINE_bool('input_size', 39, 'The input size of each sample, depending on what preprocessing was used')
+tf.app.flags.DEFINE_string('language_model', None, 'Use beam search with given language model. '
+                                                   'Must be binary format with probing hash table.')
+tf.app.flags.DEFINE_string("train_dir", "train/", "Training directory")
+tf.app.flags.DEFINE_string("run_name", "", "The run name to append to the training directory")
 
-  def is_silent(self, snd_data):
-    "Returns 'True' if below the 'silent' threshold"
-    return max(snd_data) < self.threshold
+FLAGS = tf.app.flags.FLAGS
 
-  def normalize(self, snd_data):
-    "Average the volume out"
-    MAXIMUM = 0.5
-    times = float(MAXIMUM) / max(abs(i) for i in snd_data)
 
-    r = array('f')
-    for i in snd_data:
-      r.append(i * times)
-    return r
+def create_model(session, speech_input_loader):
+  """Create speechT model and initialize or load parameters in session."""
+  model = Wav2LetterModel(speech_input_loader,
+                          FLAGS.input_size,
+                          vocabulary.SIZE + 1,
+                          learning_rate=0,
+                          learning_rate_decay_factor=0,
+                          max_gradient_norm=0,
+                          log_dir='log/',
+                          use_relu=FLAGS.relu,
+                          run_name=FLAGS.run_name,
+                          momentum=0,
+                          run_type='record',
+                          language_model=FLAGS.language_model)
+  ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
+  if ckpt and tf.gfile.Exists(ckpt.model_checkpoint_path):
+    print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
+    model.saver.restore(session, ckpt.model_checkpoint_path)
+    model.init_session(session, init_variables=False)
+  else:
+    raise FileNotFoundError('No checkpoint for recording found')
+  return model
 
-  def trim(self, snd_data):
-    "Trim the blank spots at the start and end"
 
-    def _trim(snd_data):
-      snd_started = False
-      r = array('f')
+def record_and_decode():
+  # Use training sub-directory if not specified otherwise
+  if FLAGS.run_name and FLAGS.train_dir == 'train/':
+    FLAGS.train_dir += FLAGS.run_name + '/'
 
-      for i in snd_data:
-        if not snd_started and abs(i) > self.threshold:
-          snd_started = True
-          r.append(i)
+  print('Initialize SingleInputLoader')
+  speech_input_loader = SingleInputLoader(FLAGS.input_size)
 
-        elif snd_started:
-          r.append(i)
-      return r
+  sample_rate = 16000
+  recorder = AudioRecorder(rate=sample_rate)
 
-    # Trim to the left
-    snd_data = _trim(snd_data)
+  with tf.Session() as sess:
 
-    # Trim to the right
-    snd_data.reverse()
-    snd_data = _trim(snd_data)
-    snd_data.reverse()
-    return snd_data
+    model = create_model(sess, speech_input_loader)
 
-  def add_silence(self, snd_data, seconds):
-    "Add silence to the start and end of 'snd_data' of length 'seconds' (float)"
-    r = array('f', [0 for i in range(int(seconds * self.rate))])
-    r.extend(snd_data)
-    r.extend([0 for i in range(int(seconds * self.rate))])
-    return r
+    while True:
+      print('Recording audio')
+      raw_audio, sample_width = recorder.record()
+      raw_audio = np.array(raw_audio)
 
-  def record(self):
-    """
-    Record a word or words from the microphone and
-    return the data as an array of signed floats.
+      print('Generate MFCCs or power spectrogram')
+      if FLAGS.power:
+        speech_input = preprocess.calc_power_spectrogram(raw_audio, sample_rate)
+      else:
+        speech_input = preprocess.calc_mfccs(raw_audio, sample_rate)
 
-    Normalizes the audio, trims silence from the
-    start and end, and pads with 0.5 seconds of
-    blank sound to make sure VLC et al can play
-    it without getting chopped off.
-    """
-    stream = self._pyaudio.open(format=self.format, channels=1, rate=self.rate,
-                    input=True, output=True,
-                    frames_per_buffer=self.chunk_size)
+      speech_input_loader.set_input(speech_input)
 
-    num_silent = 0
-    snd_started = False
+      print('Running speech recognition')
+      [decoded] = model.step(sess, loss=False, update=False, decode=True)
 
-    r = array('f')
+      # Print decoded string
+      decoded_ids_paths = [eval_utils.extract_decoded_ids(path) for path in decoded]
+      for decoded_path in decoded_ids_paths:
+        decoded_ids = next(decoded_path)
+        decoded_str = vocabulary.ids_to_sentence(decoded_ids)
+        print('decoded: {}'.format(decoded_str))
 
-    while 1:
-      # little endian, signed short
-      snd_data = array('f', stream.read(self.chunk_size))
-      if byteorder == 'big':
-        snd_data.byteswap()
-      r.extend(snd_data)
 
-      silent = self.is_silent(snd_data)
+def main(_):
+  record_and_decode()
 
-      if silent and snd_started:
-        num_silent += 1
-      elif not silent and not snd_started:
-        snd_started = True
 
-      if snd_started and num_silent > 30:
-        break
-
-    sample_width = self._pyaudio.get_sample_size(self.format)
-    stream.stop_stream()
-    stream.close()
-
-    r = self.normalize(r)
-    r = self.trim(r)
-    r = self.add_silence(r, 0.1)
-    return r, sample_width
-
-  def terminate(self):
-    self._pyaudio.terminate()
+if __name__ == "__main__":
+  tf.app.run()

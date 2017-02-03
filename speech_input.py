@@ -72,6 +72,60 @@ class BaseInputLoader:
   def get_inputs(self):
     raise NotImplementedError()
 
+  def get_feed_dict(self):
+    return None
+
+
+class SingleInputLoader(BaseInputLoader):
+  """
+  This class manually feeds single inputs using the feed_dict
+  """
+
+  def __init__(self, input_size):
+
+    super().__init__(input_size)
+    # Set speech input to None, must be set using `set_input`
+    self.speech_input = None
+    batch_size = 1
+
+    with tf.device("/cpu:0"):
+      # inputs is of dimension [batch_size, max_time, input_size]
+      self.inputs = tf.placeholder(tf.float32, [batch_size, None, input_size], name='inputs')
+      self.sequence_lengths = tf.placeholder(tf.int32, [batch_size], name='sequence_lengths')
+
+  def get_inputs(self):
+    """
+    Return's tensors for inputs and sequence_lengths
+    """
+    return self.inputs, self.sequence_lengths, None
+
+  def get_feed_dict(self):
+    """
+    Returns the feed dict for the next model step
+    """
+    if self.speech_input is None:
+      raise ValueError('Speech input must be provided using `set_input` first!')
+    input_tensor, sequence_lengths, max_time = self._get_inputs_feed_item([self.speech_input])
+
+    # Rest speech input
+    self.speech_input = None
+
+    return {
+      self.inputs: input_tensor,
+      self.sequence_lengths: sequence_lengths
+    }
+
+  def set_input(self, speech_input):
+    """
+    Provide inputs for the next model step
+    Args:
+      speech_input: a numpy array of size [time, input_size]
+
+    Returns:
+
+    """
+    self.speech_input = speech_input
+
 
 class InputBatchLoader(BaseInputLoader):
   """

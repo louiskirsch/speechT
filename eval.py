@@ -13,16 +13,17 @@
 # limitations under the License.
 # ==============================================================================
 
-import tensorflow as tf
+import editdistance
 import numpy as np
+import tensorflow as tf
 
 import vocabulary
-import editdistance
+from eval_utils import extract_decoded_ids
+from preprocess import SpeechCorpusReader
 from speech_input import InputBatchLoader
 from speech_model import Wav2LetterModel
-from preprocess import SpeechCorpusReader
 
-tf.app.flags.DEFINE_bool('relu', False, 'Use ReLU activation instead of tanh')
+tf.app.flags.DEFINE_bool('relu', True, 'Use ReLU activation instead of tanh')
 tf.app.flags.DEFINE_bool('power', False, 'Use a power spectrogram instead of mfccs as input')
 tf.app.flags.DEFINE_string('language_model', None, 'Use beam search with given language model. '
                                                  'Must be binary format with probing hash table.')
@@ -36,19 +37,6 @@ tf.app.flags.DEFINE_string("run_name", "", "Give this training a name to appear 
 tf.app.flags.DEFINE_integer("epoch_count", 1, "Number of epochs to evaluate")
 
 FLAGS = tf.app.flags.FLAGS
-
-
-def extract_decoded_ids(sparse_tensor):
-  ids = []
-  last_batch_id = 0
-  for i, index in enumerate(sparse_tensor.indices):
-    batch_id, char_id = index
-    if batch_id > last_batch_id:
-      yield ids
-      ids = []
-      last_batch_id = batch_id
-    ids.append(sparse_tensor.values[i])
-  yield ids
 
 
 def create_model(session, input_size, speech_input):

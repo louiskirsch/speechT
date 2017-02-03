@@ -37,6 +37,7 @@ class SpeechModel:
       run_type: "train", "dev" or "test"
       language_model: the file path to the language model to use for beam search decoding or None
     """
+    self.input_loader = input_loader
     self.input_size = input_size
     self.convolution_count = 0
 
@@ -60,16 +61,17 @@ class SpeechModel:
     tf.summary.histogram('logits', self.logits)
 
     # Define loss and optimizer
-    with tf.name_scope('training'):
-      self.cost = tf.nn.ctc_loss(self.logits, self.labels, self.sequence_lengths // 2)
-      self.avg_loss = tf.reduce_mean(self.cost, name='average_loss')
-      tf.summary.scalar('loss', self.avg_loss)
-      optimizer = tf.train.MomentumOptimizer(self.learning_rate, momentum, name='optimizer')
-      gvs = optimizer.compute_gradients(self.avg_loss)
-      gradients, trainables = zip(*gvs)
-      clipped_gradients, norm = tf.clip_by_global_norm(gradients, max_gradient_norm, name='clip_gradients')
-      self.update = optimizer.apply_gradients(zip(clipped_gradients, trainables),
-                                              global_step=self.global_step, name='apply_gradients')
+    if self.labels is not None:
+      with tf.name_scope('training'):
+        self.cost = tf.nn.ctc_loss(self.logits, self.labels, self.sequence_lengths // 2)
+        self.avg_loss = tf.reduce_mean(self.cost, name='average_loss')
+        tf.summary.scalar('loss', self.avg_loss)
+        optimizer = tf.train.MomentumOptimizer(self.learning_rate, momentum, name='optimizer')
+        gvs = optimizer.compute_gradients(self.avg_loss)
+        gradients, trainables = zip(*gvs)
+        clipped_gradients, norm = tf.clip_by_global_norm(gradients, max_gradient_norm, name='clip_gradients')
+        self.update = optimizer.apply_gradients(zip(clipped_gradients, trainables),
+                                                global_step=self.global_step, name='apply_gradients')
 
     # Decoding
     with tf.name_scope('decoding'):
@@ -164,24 +166,26 @@ class SpeechModel:
 
     self.summary_writer.add_graph(sess.graph)
 
-  def step(self, sess, update=True, decode=False, return_label=False, summary=False):
+  def step(self, sess, loss=True, update=True, decode=False, return_label=False, summary=False):
     """
     Evaluate the graph, you may update weights, decode audio or generate a summary
 
     Args:
       sess: tensorflow session
       update: should the network be trained
+      loss: should output the avg_loss
       decode: should the decoding be performed and returned
       return_label: should the label be returned
       summary: should the summary be generated
 
-    Returns: avg_loss, decoded (optional), label (optional), update (optional), summary (optional)
+    Returns: avg_loss (optional), decoded (optional), label (optional), update (optional), summary (optional)
 
     """
 
-    output_feed = [
-      self.avg_loss
-    ]
+    output_feed = []
+
+    if loss:
+      output_feed.append(self.avg_loss)
 
     if decode:
       output_feed.append(self.decoded)
@@ -195,7 +199,7 @@ class SpeechModel:
     if summary:
       output_feed.append(self.merged_summaries)
 
-    return sess.run(output_feed)
+    return sess.run(output_feed, feed_dict=self.input_loader.get_feed_dict())
 
   @abc.abstractclassmethod
   def _create_network(self, num_classes):
