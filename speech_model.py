@@ -19,7 +19,7 @@ import abc
 
 class SpeechModel:
   def __init__(self, input_loader, input_size, num_classes, learning_rate, learning_rate_decay_factor,
-               max_gradient_norm, log_dir, use_relu, run_name, momentum, run_type, beam_search):
+               max_gradient_norm, log_dir, use_relu, run_name, momentum, run_type, language_model):
     """
     Create a new speech model
 
@@ -35,7 +35,7 @@ class SpeechModel:
       run_name: the name of this run
       momentum: the momentum parameter
       run_type: "train", "dev" or "test"
-      beam_search: boolean whether beam_search or greedy decoding should be used
+      language_model: the file path to the language model to use for beam search decoding or None
     """
     self.input_size = input_size
     self.convolution_count = 0
@@ -73,10 +73,10 @@ class SpeechModel:
 
     # Decoding
     with tf.name_scope('decoding'):
-      if beam_search:
+      if language_model:
         self.decoded, self.log_probabilities = tf.nn.ctc_beam_search_decoder(self.logits,
                                                                              self.sequence_lengths // 2,
-                                                                             kenlm_file_path='gigaword.binary',
+                                                                             kenlm_file_path=language_model,
                                                                              beam_width=1000,
                                                                              top_paths=1)
       else:
@@ -215,7 +215,7 @@ class SpeechModel:
 class Wav2LetterModel(SpeechModel):
 
   def __init__(self, input_loader, input_size, num_classes, learning_rate, learning_rate_decay_factor,
-               max_gradient_norm, log_dir, use_relu, run_name, momentum, run_type, beam_search=False):
+               max_gradient_norm, log_dir, use_relu, run_name, momentum, run_type, language_model=None):
     """
     Create a new Wav2Letter model
 
@@ -231,11 +231,11 @@ class Wav2LetterModel(SpeechModel):
       run_name: the name of this run
       momentum: the momentum parameter
       run_type: "train", "dev" or "test"
-      beam_search: boolean whether beam_search or greedy decoding should be used
+      language_model: the file path to the language model to use for beam search decoding or None
 
     """
     super().__init__(input_loader, input_size, num_classes, learning_rate, learning_rate_decay_factor,
-                     max_gradient_norm, log_dir, use_relu, run_name, momentum, run_type, beam_search)
+                     max_gradient_norm, log_dir, use_relu, run_name, momentum, run_type, language_model)
 
   def _create_network(self, num_classes):
     # The first layer scales up from input_size channels to 250 channels

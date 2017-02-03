@@ -24,7 +24,8 @@ from preprocess import SpeechCorpusReader
 
 tf.app.flags.DEFINE_bool('relu', False, 'Use ReLU activation instead of tanh')
 tf.app.flags.DEFINE_bool('power', False, 'Use a power spectrogram instead of mfccs as input')
-tf.app.flags.DEFINE_bool('beam_search', False, 'Use beam search with language model - KenLM')
+tf.app.flags.DEFINE_string('language_model', None, 'Use beam search with given language model. '
+                                                 'Must be binary format with probing hash table.')
 tf.app.flags.DEFINE_bool('no_save', False, 'Do not save evaluation')
 tf.app.flags.DEFINE_integer("batch_size", 64,
                             "Batch size to use during evaluation.")
@@ -63,7 +64,7 @@ def create_model(session, input_size, speech_input):
                           run_name=FLAGS.run_name,
                           momentum=0,
                           run_type='dev',
-                          beam_search=FLAGS.beam_search)
+                          language_model=FLAGS.language_model)
   ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
   if ckpt and tf.gfile.Exists(ckpt.model_checkpoint_path):
     print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
@@ -147,7 +148,7 @@ def evaluate():
             global_letter_edit_distance += letter_edit_distance
             global_letter_error_rate += letter_error_rate
             global_word_edit_distance += word_edit_distance
-            global_word_error_rate += global_word_error_rate
+            global_word_error_rate += word_error_rate
             decodings_counter += 1
 
             print('LED: {} LER: {:.2f} WED: {} WER: {:.2f}'.format(letter_edit_distance,
