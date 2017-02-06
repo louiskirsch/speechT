@@ -54,7 +54,7 @@ def create_model(session, input_size, speech_input):
                           run_type='dev',
                           language_model=FLAGS.language_model)
   ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
-  if ckpt and tf.gfile.Exists(ckpt.model_checkpoint_path):
+  if ckpt and ckpt.model_checkpoint_path:
     print("Reading model parameters from %s" % ckpt.model_checkpoint_path)
     model.saver.restore(session, ckpt.model_checkpoint_path)
     model.init_session(session, init_variables=False)
