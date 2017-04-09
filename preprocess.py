@@ -36,7 +36,7 @@ def normalize(values):
   return (values - np.mean(values)) / np.std(values)
 
 
-def calc_power_spectrogram(audio_data, samplerate, n_mels=257, n_fft=400, hop_length=160):
+def calc_power_spectrogram(audio_data, samplerate, n_mels=128, n_fft=512, hop_length=160):
   """
   Calculate power spectrogram from the given raw audio data
 
@@ -61,7 +61,7 @@ def calc_power_spectrogram(audio_data, samplerate, n_mels=257, n_fft=400, hop_le
   return normalized_spectrogram.T
 
 
-def calc_mfccs(audio_data, samplerate, n_mfcc=13, n_fft=400, hop_length=160):
+def calc_mfccs(audio_data, samplerate, n_mfcc=13, n_fft=512, hop_length=160):
   """
   Calculate mfcc coefficients from the given raw audio data
 
