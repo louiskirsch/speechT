@@ -68,7 +68,7 @@ class SpeechModel:
         self.cost = tf.nn.ctc_loss(self.logits, self.labels, self.sequence_lengths // 2)
         self.avg_loss = tf.reduce_mean(self.cost, name='average_loss')
         tf.summary.scalar('loss', self.avg_loss)
-        optimizer = tf.train.MomentumOptimizer(self.learning_rate, momentum, name='optimizer')
+        optimizer = tf.train.AdamOptimizer(self.learning_rate, epsilon=1e-3)
         gvs = optimizer.compute_gradients(self.avg_loss)
         gradients, trainables = zip(*gvs)
         clipped_gradients, norm = tf.clip_by_global_norm(gradients, max_gradient_norm, name='clip_gradients')
