@@ -28,7 +28,9 @@ tf.app.flags.DEFINE_bool('relu', True, 'Use ReLU activation instead of tanh')
 tf.app.flags.DEFINE_bool('power', False, 'Use a power spectrogram instead of mfccs as input')
 tf.app.flags.DEFINE_bool('input_size', 39, 'The input size of each sample, depending on what preprocessing was used')
 tf.app.flags.DEFINE_string('language_model', None, 'Use beam search with given language model. '
-                                                   'Must be binary format with probing hash table.')
+                                                   'Specify a directory containing `kenlm-model.binary`, '
+                                                   '`vocabulary` and `trie`. '
+                                                   'Language model must be binary format with probing hash table.')
 tf.app.flags.DEFINE_string("train_dir", "train/", "Training directory")
 tf.app.flags.DEFINE_string("run_name", "", "The run name to append to the training directory")
 

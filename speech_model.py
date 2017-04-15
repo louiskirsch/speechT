@@ -65,7 +65,7 @@ class SpeechModel:
     # Define loss and optimizer
     if self.labels is not None:
       with tf.name_scope('training'):
-        self.cost = tf.nn.ctc_loss(self.logits, self.labels, self.sequence_lengths // 2)
+        self.cost = tf.nn.ctc_loss(self.labels, self.logits, self.sequence_lengths // 2)
         self.avg_loss = tf.reduce_mean(self.cost, name='average_loss')
         tf.summary.scalar('loss', self.avg_loss)
         optimizer = tf.train.AdamOptimizer(self.learning_rate, epsilon=1e-3)
@@ -80,7 +80,7 @@ class SpeechModel:
       if language_model:
         self.decoded, self.log_probabilities = tf.nn.ctc_beam_search_decoder(self.logits,
                                                                              self.sequence_lengths // 2,
-                                                                             kenlm_file_path=language_model,
+                                                                             kenlm_directory_path=language_model,
                                                                              beam_width=100,
                                                                              top_paths=1)
       else:

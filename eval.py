@@ -26,7 +26,9 @@ from speech_model import Wav2LetterModel
 tf.app.flags.DEFINE_bool('relu', True, 'Use ReLU activation instead of tanh')
 tf.app.flags.DEFINE_bool('power', False, 'Use a power spectrogram instead of mfccs as input')
 tf.app.flags.DEFINE_string('language_model', None, 'Use beam search with given language model. '
-                                                 'Must be binary format with probing hash table.')
+                                                   'Specify a directory containing `kenlm-model.binary`, '
+                                                   '`vocabulary` and `trie`. '
+                                                   'Language model must be binary format with probing hash table.')
 tf.app.flags.DEFINE_bool('no_save', False, 'Do not save evaluation')
 tf.app.flags.DEFINE_integer("batch_size", 64,
                             "Batch size to use during evaluation.")
