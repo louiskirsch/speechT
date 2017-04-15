@@ -16,6 +16,8 @@
 import tensorflow as tf
 import abc
 
+from tensorflow.contrib.layers import xavier_initializer
+
 
 class SpeechModel:
   def __init__(self, input_loader, input_size, num_classes, learning_rate, learning_rate_decay_factor,
@@ -79,7 +81,7 @@ class SpeechModel:
         self.decoded, self.log_probabilities = tf.nn.ctc_beam_search_decoder(self.logits,
                                                                              self.sequence_lengths // 2,
                                                                              kenlm_file_path=language_model,
-                                                                             beam_width=1000,
+                                                                             beam_width=100,
                                                                              top_paths=1)
       else:
         self.decoded, self.log_probabilities = tf.nn.ctc_greedy_decoder(self.logits,
@@ -117,10 +119,10 @@ class SpeechModel:
     layer_id = self.convolution_count
     self.convolution_count += 1
 
-    with tf.name_scope('convolution_layer_{}'.format(layer_id)) as layer:
-      # Filter and bias
-      initial_filter = tf.truncated_normal([filter_width, input_channels, out_channels], stddev=0.01)
-      filters = tf.Variable(initial_filter, name='filters')
+    with tf.variable_scope('convolution_layer_{}'.format(layer_id)) as layer:
+      # Create variables filter and bias
+      filters = tf.get_variable('filters', shape=[filter_width, input_channels, out_channels],
+                                dtype=tf.float32, initializer=xavier_initializer())
       bias = tf.Variable(tf.constant(0.0, shape=[out_channels]), name='bias')
 
       # Apply convolution
@@ -135,11 +137,11 @@ class SpeechModel:
         kernel_transposed = tf.transpose(kernel_with_depth, [3, 0, 1, 2])
 
         # this will display random 3 filters from all the output channels
-        tf.summary.image(layer + 'filters', kernel_transposed, max_outputs=3)
-        tf.summary.histogram(layer + 'filters', filters)
+        tf.summary.image(layer.name + 'filters', kernel_transposed, max_outputs=3)
+        tf.summary.histogram(layer.name + 'filters', filters)
 
-        tf.summary.image(layer + 'bias', tf.reshape(bias, [1, 1, out_channels, 1]))
-        tf.summary.histogram(layer + 'bias', bias)
+        tf.summary.image(layer.name + 'bias', tf.reshape(bias, [1, 1, out_channels, 1]))
+        tf.summary.histogram(layer.name + 'bias', bias)
 
       # Add bias
       convolution_out = tf.nn.bias_add(convolution_out, bias)
@@ -147,7 +149,7 @@ class SpeechModel:
       if apply_non_linearity:
         # Add non-linearity
         activations = self.activation_fnc(convolution_out, name='activation')
-        tf.summary.histogram(layer + 'activation', activations)
+        tf.summary.histogram(layer.name + 'activation', activations)
         return activations, out_channels
       else:
         return convolution_out, out_channels
