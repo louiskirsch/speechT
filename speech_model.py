@@ -14,6 +14,7 @@
 # ==============================================================================
 
 import tensorflow as tf
+import math
 import abc
 
 from tensorflow.contrib.layers import xavier_initializer
@@ -78,7 +79,8 @@ class SpeechModel:
     # Decoding
     with tf.name_scope('decoding'):
       if language_model:
-        self.decoded, self.log_probabilities = tf.nn.ctc_beam_search_decoder(self.logits,
+        self.softmaxed = tf.log(tf.nn.softmax(self.logits, name='softmax') + 1e-8) / math.log(10)
+        self.decoded, self.log_probabilities = tf.nn.ctc_beam_search_decoder(self.softmaxed,
                                                                              self.sequence_lengths // 2,
                                                                              kenlm_directory_path=language_model,
                                                                              beam_width=100,
