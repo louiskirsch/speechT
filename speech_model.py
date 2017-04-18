@@ -84,10 +84,12 @@ class SpeechModel:
                                                                              self.sequence_lengths // 2,
                                                                              kenlm_directory_path=language_model,
                                                                              beam_width=100,
+                                                                             merge_repeated=False,
                                                                              top_paths=1)
       else:
         self.decoded, self.log_probabilities = tf.nn.ctc_greedy_decoder(self.logits,
-                                                                        self.sequence_lengths // 2)
+                                                                        self.sequence_lengths // 2,
+                                                                        merge_repeated=True)
 
     # Initializing the variables
     self.init = tf.global_variables_initializer()
