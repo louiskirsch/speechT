@@ -18,40 +18,34 @@ import numpy as np
 import time
 import os
 
-from speech_input import InputBatchLoader
+from execution import DatasetExecutor
 from speech_model import create_default_model
-from preprocess import SpeechCorpusReader
 
 
-class Training:
+class Training(DatasetExecutor):
 
-  @staticmethod
-  def run(flags):
-    reader = SpeechCorpusReader(flags.data_dir)
+  def create_sample_generator(self, limit_count: int):
+    return self.reader.load_samples('train',
+                                    loop_infinitely=True,
+                                    limit_count=limit_count,
+                                    feature_type=self.flags.feature_type)
 
-    def create_sample_generator(limit_count=flags.limit_training_set):
-      return reader.load_samples('train',
-                                 loop_infinitely=True,
-                                 limit_count=limit_count,
-                                 feature_type=flags.feature_type)
+  def get_loader_limit_count(self) -> int:
+    return self.flags.limit_training_set
 
-    print('Determine input size from first sample')
-    input_size = next(create_sample_generator(limit_count=1))[0].shape[1]
+  def create_model(self, sess):
+    model = create_default_model(self.flags, self.input_size, self.speech_input)
+    model.restore_or_create(sess,
+                            self.flags.run_train_dir,
+                            self.flags.learning_rate if self.flags.reset_learning_rate else None)
+    return model
 
-    print('Initialize InputBatchLoader')
-    speech_input = InputBatchLoader(input_size, flags.batch_size, create_sample_generator)
+  def run(self):
 
     with tf.Session() as sess:
 
-      model = create_default_model(flags, input_size, speech_input)
-      model.restore_or_create(sess,
-                              flags.run_train_dir,
-                              flags.learning_rate if flags.reset_learning_rate else None)
-
-      coord = tf.train.Coordinator()
-      print('Starting input pipeline')
-      tf.train.start_queue_runners(sess=sess, coord=coord)
-      speech_input.start_threads(sess=sess, coord=coord, n_threads=2)
+      model = self.create_model(sess)
+      coord = self.start_pipeline(sess, n_threads=2)
 
       step_time, loss = 0.0, 0.0
       current_step = 0
@@ -62,13 +56,13 @@ class Training:
         while not coord.should_stop():
 
           current_step += 1
-          is_checkpoint_step = current_step % flags.steps_per_checkpoint == 0
+          is_checkpoint_step = current_step % self.flags.steps_per_checkpoint == 0
 
           start_time = time.time()
           step_result = model.step(sess, summary=is_checkpoint_step)
           avg_loss = step_result[0]
-          step_time += (time.time() - start_time) / flags.steps_per_checkpoint
-          loss += avg_loss / flags.steps_per_checkpoint
+          step_time += (time.time() - start_time) / self.flags.steps_per_checkpoint
+          loss += avg_loss / self.flags.steps_per_checkpoint
 
           # Once in a while, we save checkpoint and print statistics
           if is_checkpoint_step:
@@ -84,12 +78,12 @@ class Training:
             model.summary_writer.add_summary(summary, global_step)
 
             # Decrease learning rate if no improvement was seen over last 3 times.
-            if flags.learning_rate_decay_factor > 0 and len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
+            if self.flags.learning_rate_decay_factor > 0 and len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
               sess.run(model.learning_rate_decay_op)
             previous_losses.append(loss)
 
             # Save checkpoint and zero timer and loss.
-            checkpoint_path = os.path.join(flags.run_train_dir, "speechT.ckpt")
+            checkpoint_path = os.path.join(self.flags.run_train_dir, "speechT.ckpt")
             model.saver.save(sess, checkpoint_path, global_step=model.global_step)
             print('Model saved')
             step_time, loss = 0.0, 0.0
@@ -101,5 +95,4 @@ class Training:
         coord.request_stop()
 
       coord.join()
-      sess.close()
 

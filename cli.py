@@ -16,6 +16,7 @@
 import argparse
 import os
 
+
 from lazy import lazy
 
 from evaluation import Evaluation
@@ -120,16 +121,16 @@ class CLI:
     return parsed
 
   @lazy
-  def command_class(self):
+  def command_executor(self):
     return {
       'train': Training,
       'evaluate': Evaluation,
       'record': Recording
-    }[self.parsed.command]
+    }[self.parsed.command](self.parsed)
 
   def run(self):
     self._ensure_directories()
-    self.command_class.run(self.parsed)
+    self.command_executor.run()
 
   def _ensure_directories(self):
     directories = [self.parsed.train_dir,

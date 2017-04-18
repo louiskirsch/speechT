@@ -26,21 +26,23 @@ from speech_model import create_default_model
 
 class Recording:
 
-  @staticmethod
-  def run(flags):
+  def __init__(self, flags):
+    self.flags = flags
+
+  def run(self):
     # Only import here to not always require 'pyaudio'
     from record_utils import AudioRecorder
 
     print('Initialize SingleInputLoader')
-    speech_input_loader = SingleInputLoader(flags.input_size)
+    speech_input_loader = SingleInputLoader(self.flags.input_size)
 
     sample_rate = 16000
     recorder = AudioRecorder(rate=sample_rate)
 
     with tf.Session() as sess:
 
-      model = create_default_model(flags, flags.input_size, speech_input_loader)
-      model.restore(sess, flags.run_data_dir)
+      model = create_default_model(self.flags, self.flags.input_size, speech_input_loader)
+      model.restore(sess, self.flags.run_data_dir)
 
       while True:
         print('Recording audio')
@@ -48,9 +50,9 @@ class Recording:
         raw_audio = np.array(raw_audio)
 
         print('Generate MFCCs or power spectrogram')
-        if flags.feature_type == 'power':
+        if self.flags.feature_type == 'power':
           speech_input = preprocess.calc_power_spectrogram(raw_audio, sample_rate)
-        elif flags.feature_type == 'mfcc':
+        elif self.flags.feature_type == 'mfcc':
           speech_input = preprocess.calc_mfccs(raw_audio, sample_rate)
         else:
           raise NotImplementedError('Only power and mfccs are supported for input types.')
