@@ -19,10 +19,14 @@ import abc
 
 from tensorflow.contrib.layers import xavier_initializer
 
+import vocabulary
+from speech_input import BaseInputLoader
 
+
+# noinspection PyAttributeOutsideInit
 class SpeechModel:
-  def __init__(self, input_loader, input_size, num_classes, learning_rate, learning_rate_decay_factor,
-               max_gradient_norm, log_dir, use_relu, run_name, momentum, run_type, language_model):
+
+  def __init__(self, input_loader: BaseInputLoader, input_size: int, num_classes: int):
     """
     Create a new speech model
 
@@ -30,38 +34,39 @@ class SpeechModel:
       input_loader: the object that provides input tensors
       input_size: the number of values per time step
       num_classes: the number of output classes (vocabulary_size + 1 for blank label)
-      learning_rate: the inital learning rate
-      learning_rate_decay_factor: the factor to multiple the learning rate with when it should be decreased
-      max_gradient_norm: the maximum gradient norm to apply, otherwise clipping is applied
-      log_dir: the directory to log to for use of tensorboard
-      use_relu: if True, use relu instead of tanh
-      run_name: the name of this run
-      momentum: the momentum parameter
-      run_type: "train", "dev" or "test"
-      language_model: the file path to the language model to use for beam search decoding or None
     """
     self.input_loader = input_loader
     self.input_size = input_size
     self.convolution_count = 0
 
-    self.activation_fnc = tf.nn.relu if use_relu else tf.nn.tanh
+    self.global_step = tf.Variable(0, trainable=False)
 
     # inputs is of dimension [batch_size, max_time, input_size]
     self.inputs, self.sequence_lengths, self.labels = input_loader.get_inputs()
-
-    # Define non-trainables
-    self.global_step = tf.Variable(0, trainable=False)
-    self.learning_rate = tf.Variable(float(learning_rate), trainable=False, dtype=tf.float32, name='learning_rate')
-    self.learning_rate_decay_op = self.learning_rate.assign(learning_rate_decay_factor * self.learning_rate)
-
-    # Variable summaries
-    tf.summary.scalar('learning_rate', self.learning_rate)
 
     self.logits = self._create_network(num_classes)
 
     # Generate summary image for logits [batch_size=batch_size, height=num_classes, width=max_time / 2, channels=1]
     tf.summary.image('logits', tf.expand_dims(tf.transpose(self.logits, (1, 2, 0)), 3))
     tf.summary.histogram('logits', self.logits)
+
+  def add_training_ops(self, learning_rate: bool = 1e-3, learning_rate_decay_factor: float = 0,
+                       max_gradient_norm: float = 5.0, momentum: float = 0.9):
+    """
+    Add the ops for training
+
+    Args:
+      learning_rate: the inital learning rate
+      learning_rate_decay_factor: the factor to multiple the learning rate with when it should be decreased
+      max_gradient_norm: the maximum gradient norm to apply, otherwise clipping is applied
+      momentum: the momentum parameter
+    """
+
+    self.learning_rate = tf.Variable(float(learning_rate), trainable=False, dtype=tf.float32, name='learning_rate')
+    self.learning_rate_decay_op = self.learning_rate.assign(self.learning_rate * learning_rate_decay_factor)
+
+    # Variable summaries
+    tf.summary.scalar('learning_rate', self.learning_rate)
 
     # Define loss and optimizer
     if self.labels is not None:
@@ -76,7 +81,13 @@ class SpeechModel:
         self.update = optimizer.apply_gradients(zip(clipped_gradients, trainables),
                                                 global_step=self.global_step, name='apply_gradients')
 
-    # Decoding
+  def add_decoding_ops(self, language_model: str = None):
+    """
+    Add the ops for decoding
+
+    Args:
+      language_model: the file path to the language model to use for beam search decoding or None
+    """
     with tf.name_scope('decoding'):
       if language_model:
         self.softmaxed = tf.log(tf.nn.softmax(self.logits, name='softmax') + 1e-8) / math.log(10)
@@ -91,6 +102,7 @@ class SpeechModel:
                                                                         self.sequence_lengths // 2,
                                                                         merge_repeated=True)
 
+  def finalize(self, log_dir: str, run_name: str, run_type: str):
     # Initializing the variables
     self.init = tf.global_variables_initializer()
 
@@ -99,9 +111,7 @@ class SpeechModel:
 
     # Create summary writers
     self.merged_summaries = tf.summary.merge_all()
-    if run_name:
-      run_name += '_'
-    self.summary_writer = tf.summary.FileWriter('{}/{}{}'.format(log_dir, run_name, run_type))
+    self.summary_writer = tf.summary.FileWriter('{}/{}_{}'.format(log_dir, run_name, run_type))
 
   def _convolution(self, value, filter_width, stride, input_channels, out_channels, apply_non_linearity=True):
     """
@@ -152,7 +162,7 @@ class SpeechModel:
 
       if apply_non_linearity:
         # Add non-linearity
-        activations = self.activation_fnc(convolution_out, name='activation')
+        activations = tf.nn.relu(convolution_out, name='activation')
         tf.summary.histogram(layer.name + 'activation', activations)
         return activations, out_channels
       else:
@@ -221,31 +231,29 @@ class SpeechModel:
     """
     raise NotImplementedError()
 
+  def restore(self, session, checkpoint_directory: str, reset_learning_rate: float = None):
+    ckpt = tf.train.get_checkpoint_state(checkpoint_directory)
+    if ckpt and ckpt.model_checkpoint_path:
+      print('Reading model parameters from {}'.format(ckpt.model_checkpoint_path))
+      self.saver.restore(session, ckpt.model_checkpoint_path)
+      self.init_session(session, init_variables=False)
+      if reset_learning_rate:
+        session.run(self.learning_rate.assign(reset_learning_rate))
+    else:
+      raise FileNotFoundError('No checkpoint for evaluation found')
+
+  def restore_or_create(self, session, checkpoint_directory: str, reset_learning_rate: float = None):
+    try:
+      self.restore(session, checkpoint_directory, reset_learning_rate)
+    except FileNotFoundError:
+      print('Created model with fresh parameters.')
+      self.init_session(session, init_variables=True)
+
 
 class Wav2LetterModel(SpeechModel):
 
-  def __init__(self, input_loader, input_size, num_classes, learning_rate, learning_rate_decay_factor,
-               max_gradient_norm, log_dir, use_relu, run_name, momentum, run_type, language_model=None):
-    """
-    Create a new Wav2Letter model
-
-    Args:
-      input_loader: the object that provides input tensors
-      input_size: the number of values per time step
-      num_classes: the number of output classes (vocabulary_size + 1 for blank label)
-      learning_rate: the inital learning rate
-      learning_rate_decay_factor: the factor to multiple the learning rate with when it should be decreased
-      max_gradient_norm: the maximum gradient norm to apply, otherwise clipping is applied
-      log_dir: the directory to log to for use of tensorboard
-      use_relu: if True, use relu instead of tanh
-      run_name: the name of this run
-      momentum: the momentum parameter
-      run_type: "train", "dev" or "test"
-      language_model: the file path to the language model to use for beam search decoding or None
-
-    """
-    super().__init__(input_loader, input_size, num_classes, learning_rate, learning_rate_decay_factor,
-                     max_gradient_norm, log_dir, use_relu, run_name, momentum, run_type, language_model)
+  def __init__(self, input_loader: BaseInputLoader, input_size: int, num_classes: int):
+    super().__init__(input_loader, input_size, num_classes)
 
   def _create_network(self, num_classes):
     # The first layer scales up from input_size channels to 250 channels
@@ -268,3 +276,26 @@ class Wav2LetterModel(SpeechModel):
 
     # transpose logits to size [max_time / 2, batch_size, num_classes]
     return tf.transpose(outputs, (1, 0, 2))
+
+
+def create_default_model(flags, input_size: int, speech_input: BaseInputLoader) -> SpeechModel:
+  model = Wav2LetterModel(input_loader=speech_input,
+                          input_size=input_size,
+                          num_classes=vocabulary.SIZE + 1)
+
+  # TODO how can we restore only selected variables so we do not need to always create the full network?
+  if flags.command == 'train':
+    model.add_training_ops(learning_rate=flags.learning_rate,
+                           learning_rate_decay_factor=flags.learning_rate_decay_factor,
+                           max_gradient_norm=flags.max_gradient_norm,
+                           momentum=flags.momentum)
+    model.add_decoding_ops()
+  else:
+    model.add_training_ops()
+    model.add_decoding_ops(language_model=flags.language_model)
+
+  model.finalize(log_dir=flags.log_dir,
+                 run_name=flags.run_name,
+                 run_type=flags.run_type)
+
+  return model

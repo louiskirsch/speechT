@@ -20,6 +20,7 @@ from array import array
 
 import pyaudio
 
+
 class AudioRecorder:
 
   def __init__(self, rate=16000, threshold=0.03, chunk_size=1024):
