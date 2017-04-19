@@ -12,11 +12,12 @@ from speech_model import SpeechModel
 
 class Candidate:
 
-  def __init__(self, lm_weight: float, word_count_weight: float):
+  def __init__(self, lm_weight: float, word_count_weight: float, valid_word_count_weight: float):
     self.score = None
     self.stats = None
     self.lm_weight = lm_weight
     self.word_count_weight = word_count_weight
+    self.valid_word_count_weight = valid_word_count_weight
 
   def __gt__(self, other):
     return self.score > other.score
@@ -25,10 +26,11 @@ class Candidate:
     return self.score < other.score
 
   def __str__(self):
-    return ('{:.2f} Candidate (lm_weight={:.2f}, wc_weight={:.2f}) '
+    return ('{:.2f} Candidate (lm_weight={:.2f}, wc_weight={:.2f}, valid_wc_weight={:.2f}) '
             'has LER: {:.2f} WER: {:.2f}').format(self.score,
                                                   self.lm_weight,
                                                   self.word_count_weight,
+                                                  self.valid_word_count_weight,
                                                   self.stats.global_letter_error_rate,
                                                   self.stats.global_word_error_rate)
 
@@ -36,9 +38,14 @@ class Candidate:
     self.score = score
     self.stats = stats
 
+  @staticmethod
+  def random_noise(std: float):
+    return np.random.normal(loc=0, scale=std)
+
   def mutate(self, std: float):
-    return Candidate(lm_weight=self.lm_weight + np.random.normal(loc=0, scale=std),
-                     word_count_weight=self.word_count_weight + np.random.normal(loc=0, scale=std))
+    return Candidate(lm_weight=self.lm_weight + self.random_noise(std),
+                     word_count_weight=self.word_count_weight + self.random_noise(std),
+                     valid_word_count_weight=self.valid_word_count_weight + self.random_noise(std))
 
 
 class LanguageModelParameterSearch(Evaluation):
@@ -58,7 +65,8 @@ class LanguageModelParameterSearch(Evaluation):
     stats = EvalStatistics()
     feed_dict = {
       model.lm_weight: candidate.lm_weight,
-      model.word_count_weight: candidate.word_count_weight
+      model.word_count_weight: candidate.word_count_weight,
+      model.valid_word_count_weight: candidate.valid_word_count_weight
     }
     self.run_epoch(model, sess, stats, save=False, verbose=False, feed_dict=feed_dict)
     score = -(stats.global_letter_error_rate + stats.global_word_error_rate)
@@ -83,7 +91,7 @@ class LanguageModelParameterSearch(Evaluation):
           stdscr.addstr(0, 0, 'Loading...')
           stdscr.refresh()
 
-        new_candidate = Candidate(1.0, 1.0)
+        new_candidate = Candidate(1.0, 0.0, 0.0)
         self._update_score_for_candidate(model, sess, new_candidate)
         self.candidates.append(new_candidate)
 
