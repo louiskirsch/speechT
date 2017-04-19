@@ -89,11 +89,16 @@ class SpeechModel:
       language_model: the file path to the language model to use for beam search decoding or None
     """
     with tf.name_scope('decoding'):
+      self.lm_weight = tf.placeholder_with_default(1.0, shape=(), name='language_model_weight')
+      self.word_count_weight = tf.placeholder_with_default(1.0, shape=(), name='word_count_weight')
+
       if language_model:
         self.softmaxed = tf.log(tf.nn.softmax(self.logits, name='softmax') + 1e-8) / math.log(10)
         self.decoded, self.log_probabilities = tf.nn.ctc_beam_search_decoder(self.softmaxed,
                                                                              self.sequence_lengths // 2,
                                                                              kenlm_directory_path=language_model,
+                                                                             kenlm_weight=self.lm_weight,
+                                                                             word_count_weight=self.word_count_weight,
                                                                              beam_width=100,
                                                                              merge_repeated=False,
                                                                              top_paths=1)
@@ -182,7 +187,7 @@ class SpeechModel:
 
     self.summary_writer.add_graph(sess.graph)
 
-  def step(self, sess, loss=True, update=True, decode=False, return_label=False, summary=False):
+  def step(self, sess, loss=True, update=True, decode=False, return_label=False, summary=False, feed_dict=None):
     """
     Evaluate the graph, you may update weights, decode audio or generate a summary
 
@@ -193,6 +198,7 @@ class SpeechModel:
       decode: should the decoding be performed and returned
       return_label: should the label be returned
       summary: should the summary be generated
+      feed_dict: additional tensors that should be fed
 
     Returns: avg_loss (optional), decoded (optional), label (optional), update (optional), summary (optional)
 
@@ -215,7 +221,11 @@ class SpeechModel:
     if summary:
       output_feed.append(self.merged_summaries)
 
-    return sess.run(output_feed, feed_dict=self.input_loader.get_feed_dict())
+    input_feed_dict = self.input_loader.get_feed_dict() or {}
+    if feed_dict is not None:
+      input_feed_dict.update(feed_dict)
+
+    return sess.run(output_feed, feed_dict=input_feed_dict)
 
   @abc.abstractclassmethod
   def _create_network(self, num_classes):

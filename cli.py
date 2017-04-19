@@ -20,6 +20,7 @@ import os
 from lazy import lazy
 
 from evaluation import Evaluation
+from parameter_search import LanguageModelParameterSearch
 from recording import Recording
 from training import Training
 
@@ -33,7 +34,7 @@ class CLI:
     self._add_training_parser()
     self._add_evaluation_parser()
     self._add_recording_parser()
-    self._add_local_search_parser()
+    self._add_parameter_search_parser()
 
   def _create_base_parser(self):
     base_parser = argparse.ArgumentParser(add_help=False)
@@ -102,8 +103,17 @@ class CLI:
                                   help='The input size of each sample, depending on what preprocessing was used')
     self._add_language_model_argument(recording_parser)
 
-  def _add_local_search_parser(self):
-    pass
+  def _add_parameter_search_parser(self):
+    parameter_search_parser = self.subparsers.add_parser('search', help='Search for language model hyper parameters'
+                                                                        'using local search.',
+                                                         parents=[self.base_parser])
+    parameter_search_parser.add_argument('--population-size', dest='population_size', type=int, default=10,
+                                         help='The size of the population for the local search.')
+    parameter_search_parser.add_argument('--noise-std', dest='noise_std', type=float, default=0.5,
+                                         help='The standard deviation of the normal noise for mutation.')
+    parameter_search_parser.add_argument('--ui', dest='use_ui', action='store_true',
+                                         help='Whether to use an UI to print results.')
+    self._add_language_model_argument(parameter_search_parser)
 
   @lazy
   def parsed(self):
@@ -115,6 +125,8 @@ class CLI:
       parsed.run_type = parsed.dataset
     elif parsed.command == 'record':
       parsed.run_type = 'record'
+    else:
+      parsed.run_type = 'other'
 
     parsed.run_train_dir = parsed.train_dir + '/' + parsed.run_name
 
@@ -125,7 +137,8 @@ class CLI:
     return {
       'train': Training,
       'evaluate': Evaluation,
-      'record': Recording
+      'record': Recording,
+      'search': LanguageModelParameterSearch
     }[self.parsed.command](self.parsed)
 
   def run(self):

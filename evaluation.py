@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+from typing import Dict
 
 import editdistance
 import numpy as np
@@ -95,7 +96,8 @@ class Evaluation(DatasetExecutor):
           if coord.should_stop():
             break
 
-          self.run_epoch(epoch, model, sess, stats)
+          should_save = self.flags.should_save and epoch == 0
+          self.run_epoch(should_save, model, sess, stats)
 
         self.print_global_statistics(stats)
 
@@ -114,16 +116,18 @@ class Evaluation(DatasetExecutor):
                                                            stats.global_word_edit_distance,
                                                            stats.global_word_error_rate))
 
-  def run_epoch(self, epoch: int, model: SpeechModel, sess: tf.Session, stats: EvalStatistics, verbose=True):
+  def run_epoch(self, model: SpeechModel, sess: tf.Session, stats: EvalStatistics,
+                save: bool, verbose=True, feed_dict: Dict=None):
     global_step = model.global_step.eval()
 
-    # Validate on development set and write summary
-    if not self.flags.should_save or epoch > 0:
-      avg_loss, decoded, label = model.step(sess, update=False, decode=True, return_label=True)
-    else:
-      avg_loss, decoded, label, summary = model.step(sess, update=False, decode=True,
-                                                     return_label=True, summary=True)
+    # Validate on data set and write summary
+    if save:
+      avg_loss, decoded, label, summary = model.step(sess, update=False, decode=True, return_label=True,
+                                                     summary=True, feed_dict=feed_dict)
       model.summary_writer.add_summary(summary, global_step)
+    else:
+      avg_loss, decoded, label = model.step(sess, update=False, decode=True,
+                                            return_label=True, feed_dict=feed_dict)
 
     if verbose:
       perplexity = np.exp(float(avg_loss)) if avg_loss < 300 else float("inf")
