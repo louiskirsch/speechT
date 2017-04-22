@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 # Copyright 2017 Louis Kirsch. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -97,7 +99,7 @@ class CLI:
     evaluation_parser.set_defaults(dataset='test')
 
   def _add_recording_parser(self):
-    recording_parser = self.subparsers.add_parser('record', help='Record using your microphone and inspect'
+    recording_parser = self.subparsers.add_parser('record', help='Record using your microphone and inspect '
                                                                  'the transcription.',
                                                   parents=[self.base_parser])
     recording_parser.add_argument('--input-size', dest='input_size', type=int, default=128,
@@ -139,6 +141,7 @@ class CLI:
       parsed.run_type = 'record'
     else:
       parsed.run_type = 'other'
+      return parsed
 
     parsed.run_train_dir = parsed.train_dir + '/' + parsed.run_name
 
@@ -155,8 +158,11 @@ class CLI:
     }[self.parsed.command](self.parsed)
 
   def run(self):
-    self._ensure_directories()
-    self.command_executor.run()
+    if not self.parsed.command:
+      self.parser.print_help()
+    else:
+      self._ensure_directories()
+      self.command_executor.run()
 
   def _ensure_directories(self):
     directories = [self.parsed.train_dir,

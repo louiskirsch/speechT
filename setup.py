@@ -5,6 +5,7 @@ setup(
   name='speechT',
   version='1.0',
   packages=['speecht'],
+  scripts=['speecht-cli'],
   url='https://github.com/timediv/speechT',
   license='Apache License 2.0',
   author='Louis Kirsch',
