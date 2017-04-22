@@ -18,13 +18,7 @@
 import argparse
 import os
 
-from speecht.evaluation import Evaluation
 from lazy import lazy
-from speecht.parameter_search import LanguageModelParameterSearch
-from speecht.preprocessing import Preprocessing
-from speecht.training import Training
-
-from speecht.recording import Recording
 
 
 class CLI:
@@ -147,14 +141,39 @@ class CLI:
 
     return parsed
 
+  @staticmethod
+  def _get_training_executor(flags):
+    import speecht.training
+    return speecht.training.Training(flags)
+
+  @staticmethod
+  def _get_evaluation_executor(flags):
+    import speecht.evaluation
+    return speecht.evaluation.Evaluation(flags)
+
+  @staticmethod
+  def _get_recording_executor(flags):
+    import speecht.recording
+    return speecht.recording.Recording(flags)
+
+  @staticmethod
+  def _get_search_executor(flags):
+    import speecht.parameter_search
+    return speecht.parameter_search.LanguageModelParameterSearch(flags)
+
+  @staticmethod
+  def _get_preprocessing_executor(flags):
+    import speecht.preprocessing
+    return speecht.preprocessing.Preprocessing(flags)
+
   @lazy
   def command_executor(self):
     return {
-      'train': Training,
-      'evaluate': Evaluation,
-      'record': Recording,
-      'search': LanguageModelParameterSearch,
-      'preprocess': Preprocessing
+      'train': self._get_training_executor,
+      'evaluate': self._get_evaluation_executor,
+      'record': self._get_recording_executor,
+      'search': self._get_search_executor,
+      'preprocess': self._get_preprocessing_executor
     }[self.parsed.command](self.parsed)
 
   def run(self):

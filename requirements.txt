@@ -4,3 +4,4 @@ pyaudio
 lazy
 librosa
 editdistance
+typing
