@@ -39,6 +39,11 @@ speecht-cli train
 
 Use `--help` for more details.
 
+You can monitor the training and see other logs in [tensorboard](https://www.tensorflow.org/get_started/summaries_and_tensorboard)
+```
+tensorboard --logdir log/
+```
+
 ## Testing
 
 To evaluate on the test set run
