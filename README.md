@@ -1,7 +1,24 @@
 # speechT
 An opensource speech-to-text software written in tensorflow.
 
-Python 3 is required.
+
+
+## Installation
+
+### Prerequisites
+
+Python 3 and portaudio19-dev are required.
+
+On Ubuntu install via
+```
+sudo apt install python3-pip portaudio19-dev
+```
+
+### Install via pip3
+
+```
+pip3 install git+https://github.com/timediv/speechT
+```
 
 ## Architecture
 Currently speechT is based on the [Wav2Letter paper](https://arxiv.org/abs/1609.03193) and the CTC loss function.
@@ -12,12 +29,12 @@ The speech corpus from http://www.openslr.org/12/ is automatically downloaded.
 ## Training
 The data must be preprocessed before training
 ```
-python3 cli.py preprocess
+speecht-cli preprocess
 ```
 
 Then, to run the training, execute
 ```
-python3 cli.py train
+speecht-cli train
 ```
 
 Use `--help` for more details.
@@ -26,7 +43,7 @@ Use `--help` for more details.
 
 To evaluate on the test set run
 ```
-python3 cli.py evaluate
+speecht-cli evaluate
 ```
 
 Use `--help` for more details.
@@ -35,7 +52,7 @@ Use `--help` for more details.
 
 To record using your microphone and then print the transcription run
 ```
-python3 cli.py record
+speecht-cli record
 ```
 
 Use `--help` for more details.
