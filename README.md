@@ -7,11 +7,11 @@ An opensource speech-to-text software written in tensorflow.
 
 ### Prerequisites
 
-Python 3 and portaudio19-dev are required.
+Python3, portaudio19-dev and ffmpeg are required.
 
 On Ubuntu install via
 ```
-sudo apt install python3-pip portaudio19-dev
+sudo apt install python3-pip portaudio19-dev ffmpeg
 ```
 
 ### Install via pip3
