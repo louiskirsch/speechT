@@ -12,21 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+import fnmatch
+import logging
+import multiprocessing
+import os
+import random
 from multiprocessing.pool import Pool
 
 import librosa
-import os
-
-import logging
-
-import multiprocessing
 import numpy as np
-import fnmatch
-import random
-import vocabulary
-import argparse
+import speecht.vocabulary
 
-from corpus import SpeechCorpusProvider
+from speecht.corpus import SpeechCorpusProvider
 
 
 def normalize(values):
@@ -156,7 +153,7 @@ class SpeechCorpusReader:
     # Create the transcript dictionary
     transcript_dict = dict()
     for splitted in self._get_transcript_entries(self._data_directory):
-      transcript_dict[splitted[0]] = vocabulary.sentence_to_ids(splitted[1])
+      transcript_dict[splitted[0]] = speecht.vocabulary.sentence_to_ids(splitted[1])
 
     return transcript_dict
 

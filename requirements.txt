@@ -1,0 +1,6 @@
+pyaudio
+lazy
+librosa
+tensorflow
+editdistance
+numpy

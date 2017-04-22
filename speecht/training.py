@@ -13,13 +13,14 @@
 # limitations under the License.
 # ==============================================================================
 
-import tensorflow as tf
-import numpy as np
-import time
 import os
+import time
 
-from execution import DatasetExecutor
-from speech_model import create_default_model
+import numpy as np
+import tensorflow as tf
+from speecht.execution import DatasetExecutor
+
+from speecht.speech_model import create_default_model
 
 
 class Training(DatasetExecutor):

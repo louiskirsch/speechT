@@ -1,11 +1,11 @@
+import os
+import shutil
 from unittest import TestCase
 
-import shutil
-
-import preprocessing
-from preprocessing import SpeechCorpusReader
-import os
 import numpy as np
+
+from speecht import preprocessing
+from speecht.preprocessing import SpeechCorpusReader
 
 
 class TestSpeechCorpusReader(TestCase):

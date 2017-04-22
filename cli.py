@@ -16,14 +16,13 @@
 import argparse
 import os
 
-
+from speecht.evaluation import Evaluation
 from lazy import lazy
+from speecht.parameter_search import LanguageModelParameterSearch
+from speecht.preprocessing import Preprocessing
+from speecht.training import Training
 
-from evaluation import Evaluation
-from parameter_search import LanguageModelParameterSearch
-from preprocessing import Preprocessing
-from recording import Recording
-from training import Training
+from speecht.recording import Recording
 
 
 class CLI:

@@ -1,13 +1,27 @@
-import random
+# Copyright 2017 Louis Kirsch. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
 import bisect
+import random
 from curses import wrapper
-from typing import List, Iterable
 
-from evaluation import Evaluation, EvalStatistics
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
+from speecht.evaluation import Evaluation, EvalStatistics
 
-from speech_model import SpeechModel
+from speecht.speech_model import SpeechModel
 
 
 class Candidate:

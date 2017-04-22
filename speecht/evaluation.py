@@ -17,10 +17,10 @@ from typing import Dict
 import editdistance
 import numpy as np
 import tensorflow as tf
+import speecht.vocabulary
+from speecht.execution import DatasetExecutor
 
-import vocabulary
-from execution import DatasetExecutor
-from speech_model import SpeechModel
+from speecht.speech_model import SpeechModel
 
 
 class EvalStatistics:
@@ -97,7 +97,7 @@ class Evaluation(DatasetExecutor):
             break
 
           should_save = self.flags.should_save and epoch == 0
-          self.run_epoch(should_save, model, sess, stats)
+          self.run_epoch(model, sess, stats, should_save)
 
         self.print_global_statistics(stats)
 
@@ -136,12 +136,12 @@ class Evaluation(DatasetExecutor):
     # Print decode
     decoded_ids_paths = [Evaluation.extract_decoded_ids(path) for path in decoded]
     for label_ids in Evaluation.extract_decoded_ids(label):
-      expected_str = vocabulary.ids_to_sentence(label_ids)
+      expected_str = speecht.vocabulary.ids_to_sentence(label_ids)
       if verbose:
         print('expected: {}'.format(expected_str))
       for decoded_path in decoded_ids_paths:
         decoded_ids = next(decoded_path)
-        decoded_str = vocabulary.ids_to_sentence(decoded_ids)
+        decoded_str = speecht.vocabulary.ids_to_sentence(decoded_ids)
         stats.track_decoding(decoded_str, expected_str)
         if verbose:
           print('decoded: {}'.format(decoded_str))

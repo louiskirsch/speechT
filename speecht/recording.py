@@ -13,15 +13,13 @@
 # limitations under the License.
 # ==============================================================================
 
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
+from speecht.evaluation import Evaluation
+from speecht.speech_input import SingleInputLoader
+from speecht.speech_model import create_default_model
 
-from evaluation import Evaluation
-import preprocessing
-import vocabulary
-
-from speech_input import SingleInputLoader
-from speech_model import create_default_model
+from speecht import preprocessing
 
 
 class Recording:
@@ -31,7 +29,7 @@ class Recording:
 
   def run(self):
     # Only import here to not always require 'pyaudio'
-    from record_utils import AudioRecorder
+    from speecht.record_utils import AudioRecorder
 
     print('Initialize SingleInputLoader')
     speech_input_loader = SingleInputLoader(self.flags.input_size)

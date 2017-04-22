@@ -91,6 +91,7 @@ ENV/
 # Idea
 .idea/
 
-# Data
-data/
-train/
+# Created files by program
+/data/
+/train/
+/logs/

@@ -13,14 +13,14 @@
 # limitations under the License.
 # ==============================================================================
 
-import tensorflow as tf
-import math
 import abc
+import math
 
+import tensorflow as tf
+import speecht.vocabulary
 from tensorflow.contrib.layers import xavier_initializer
 
-import vocabulary
-from speech_input import BaseInputLoader
+from speecht.speech_input import BaseInputLoader
 
 
 # noinspection PyAttributeOutsideInit
@@ -293,7 +293,7 @@ class Wav2LetterModel(SpeechModel):
 def create_default_model(flags, input_size: int, speech_input: BaseInputLoader) -> SpeechModel:
   model = Wav2LetterModel(input_loader=speech_input,
                           input_size=input_size,
-                          num_classes=vocabulary.SIZE + 1)
+                          num_classes=speecht.vocabulary.SIZE + 1)
 
   # TODO how can we restore only selected variables so we do not need to always create the full network?
   if flags.command == 'train':
