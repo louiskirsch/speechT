@@ -1,8 +1,6 @@
 # speechT
 An opensource speech-to-text software written in tensorflow.
 
-
-
 ## Installation
 
 ### Prerequisites
@@ -61,3 +59,12 @@ speecht-cli record
 ```
 
 Use `--help` for more details.
+
+## Using a language model
+
+If you'd like to use KenLM as a language model for decoding you need to compile and install [tensorflow-with-kenlm](https://github.com/timediv/tensorflow-with-kenlm).
+
+Then run:
+```
+speecht-cli evaluate --language-model YOUR_KENLM_FILES_DIRECTORY/
+```
