@@ -1,6 +1,6 @@
+numpy
+tensorflow
 pyaudio
 lazy
 librosa
-tensorflow
 editdistance
-numpy
