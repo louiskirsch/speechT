@@ -21,6 +21,7 @@ from lazy import lazy
 
 from evaluation import Evaluation
 from parameter_search import LanguageModelParameterSearch
+from preprocessing import Preprocessing
 from recording import Recording
 from training import Training
 
@@ -35,6 +36,7 @@ class CLI:
     self._add_evaluation_parser()
     self._add_recording_parser()
     self._add_parameter_search_parser()
+    self._add_preprocess_parser()
 
   def _create_base_parser(self):
     base_parser = argparse.ArgumentParser(add_help=False)
@@ -103,6 +105,17 @@ class CLI:
                                   help='The input size of each sample, depending on what preprocessing was used')
     self._add_language_model_argument(recording_parser)
 
+  def _add_preprocess_parser(self):
+    preprocess_parser = self.subparsers.add_parser('preprocess', help='Preprocess and cache all audio.',
+                                                   parents=[self.base_parser])
+    preprocess_parser.add_argument('--train-only', dest='train_only', action='store_true',
+                        help='Preprocess only training data')
+    preprocess_parser.add_argument('--test-only', dest='test_only', action='store_true',
+                        help='Preprocess only test data')
+    preprocess_parser.add_argument('--dev-only', dest='dev_only', action='store_true',
+                        help='Preprocess only development data')
+    
+
   def _add_parameter_search_parser(self):
     parameter_search_parser = self.subparsers.add_parser('search', help='Search for language model hyper parameters'
                                                                         'using local search.',
@@ -138,7 +151,8 @@ class CLI:
       'train': Training,
       'evaluate': Evaluation,
       'record': Recording,
-      'search': LanguageModelParameterSearch
+      'search': LanguageModelParameterSearch,
+      'preprocess': Preprocessing
     }[self.parsed.command](self.parsed)
 
   def run(self):

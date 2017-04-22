@@ -17,7 +17,7 @@ import tensorflow as tf
 import numpy as np
 
 from evaluation import Evaluation
-import preprocess
+import preprocessing
 import vocabulary
 
 from speech_input import SingleInputLoader
@@ -51,9 +51,9 @@ class Recording:
 
         print('Generate MFCCs or power spectrogram')
         if self.flags.feature_type == 'power':
-          speech_input = preprocess.calc_power_spectrogram(raw_audio, sample_rate)
+          speech_input = preprocessing.calc_power_spectrogram(raw_audio, sample_rate)
         elif self.flags.feature_type == 'mfcc':
-          speech_input = preprocess.calc_mfccs(raw_audio, sample_rate)
+          speech_input = preprocessing.calc_mfccs(raw_audio, sample_rate)
         else:
           raise NotImplementedError('Only power and mfccs are supported for input types.')
 

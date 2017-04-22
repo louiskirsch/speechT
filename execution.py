@@ -3,7 +3,7 @@ from functools import partial
 
 import tensorflow as tf
 
-from preprocess import SpeechCorpusReader
+from preprocessing import SpeechCorpusReader
 from speech_input import InputBatchLoader
 from speech_model import create_default_model
 

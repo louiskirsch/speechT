@@ -2,8 +2,8 @@ from unittest import TestCase
 
 import shutil
 
-import preprocess
-from preprocess import SpeechCorpusReader
+import preprocessing
+from preprocessing import SpeechCorpusReader
 import os
 import numpy as np
 
@@ -56,14 +56,14 @@ class TestSpeechCorpusReader(TestCase):
     self.assertTrue(np.array_equal(audio_fragments, expected_audio_fragments))
 
   def test_store_samples(self):
-    self.reader.store_samples(self.TEST_FILES_DIR, preprocess.calc_mfccs)
+    self.reader.store_samples(self.TEST_FILES_DIR, preprocessing.calc_mfccs)
     self.assertTrue(os.path.exists(self.BASE_DIR + 'preprocessed/' + self.TEST_FILES_DIR + '/1089-134686-0037.npz'))
 
   def test_load_samples(self):
-    self.reader.store_samples(self.TEST_FILES_DIR, preprocess.calc_mfccs)
+    self.reader.store_samples(self.TEST_FILES_DIR, preprocessing.calc_mfccs)
     samples_stored = list(self.reader.load_samples(self.TEST_FILES_DIR))
     samples_generated = [(audio_fragments, transcript) for audio_id, audio_fragments, transcript
-                          in self.reader.generate_samples(self.TEST_FILES_DIR, preprocess.calc_mfccs)]
+                         in self.reader.generate_samples(self.TEST_FILES_DIR, preprocessing.calc_mfccs)]
 
     self.assertEqual(len(samples_stored), 1)
     self.assertEqual(len(samples_generated), 1)

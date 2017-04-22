@@ -24,8 +24,9 @@ import numpy as np
 import fnmatch
 import random
 import vocabulary
-import corpus
 import argparse
+
+from corpus import SpeechCorpusProvider
 
 
 def normalize(values):
@@ -276,39 +277,33 @@ class SpeechCorpusReader:
       random.shuffle(files)
 
 
-if __name__ == '__main__':
-  parser = argparse.ArgumentParser(
-    description='Generate preprocessed file from audio files and transcripts')
-  parser.add_argument('--data_directory', type=str, required=False, default='data',
-                      help='The data directory to pull the files from and store the preprocessed file')
-  parser.add_argument('--all', required=False, default=False, action='store_true',
-                      help='Preprocess training, test and development data')
-  parser.add_argument('--train', required=False, default=False, action='store_true',
-                      help='Preprocess training data')
-  parser.add_argument('--test', required=False, default=False, action='store_true',
-                      help='Preprocess test data')
-  parser.add_argument('--dev', required=False, default=False, action='store_true',
-                      help='Preprocess development data')
-  parser.add_argument('--power-spectrogram', dest='preprocess_fnc', action='store_const',
-                      const=calc_power_spectrogram, default=calc_mfccs,
-                      help='Generate power spectrograms instead of mfccs')
-  args = parser.parse_args()
+class Preprocessing:
 
-  if not(args.all or args.train or args.test or args.dev):
-    print('You must specify the data set to preprocess. Use --help')
+  def __init__(self, flags):
+    self.flags = flags
 
-  corpus = corpus.SpeechCorpusProvider(args.data_directory)
-  corpus.ensure_availability()
-  corpus_reader = SpeechCorpusReader(args.data_directory)
+  def run(self):
+    corpus = SpeechCorpusProvider(self.flags.data_dir)
+    corpus.ensure_availability()
+    corpus_reader = SpeechCorpusReader(self.flags.data_dir)
 
-  if args.all or args.train:
-    print('Preprocessing training data')
-    corpus_reader.store_samples('train', args.preprocess_fnc)
+    if self.flags.feature_type == 'mfcc':
+      preprocess_fnc = calc_mfccs
+    elif self.flags.feature_type == 'power':
+      preprocess_fnc = calc_power_spectrogram
+    else:
+      raise ValueError('Feature type must be mfcc or power.')
 
-  if args.all or args.test:
-    print('Preprocessing test data')
-    corpus_reader.store_samples('test', args.preprocess_fnc)
+    preprocess_all = not (self.flags.train_only or self.flags.test_only or self.flags.dev_only)
 
-  if args.all or args.dev:
-    print('Preprocessing development data')
-    corpus_reader.store_samples('dev', args.preprocess_fnc)
+    if self.flags.train_only or preprocess_all:
+      print('Preprocessing training data')
+      corpus_reader.store_samples('train', preprocess_fnc)
+
+    if self.flags.test_only or preprocess_all:
+      print('Preprocessing test data')
+      corpus_reader.store_samples('test', preprocess_fnc)
+
+    if self.flags.dev_only or preprocess_all:
+      print('Preprocessing development data')
+      corpus_reader.store_samples('dev', preprocess_fnc)
