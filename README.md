@@ -12,22 +12,30 @@ The speech corpus from http://www.openslr.org/12/ is automatically downloaded.
 ## Training
 The data must be preprocessed before training
 ```
-python3 preprocess.py
+python3 cli.py preprocess
 ```
 
 Then, to run the training, execute
 ```
-python3 train.py
+python3 cli.py train
 ```
 
-Important flags  
-`--data_dir` to specify the data directory to download speech corpus to *(defaults to ./data/)*  
-`--train_dir` to specify the train directory to save checkpoints and vocabulary to *(defaults to ./train/)*  
+Use `--help` for more details.
 
 ## Testing
 
-Not yet implemented.
+To evaluate on the test set run
+```
+python3 cli.py evaluate
+```
+
+Use `--help` for more details.
 
 ## Live usage
 
-Not yet implemented.
+To record using your microphone and then print the transcription run
+```
+python3 cli.py record
+```
+
+Use `--help` for more details.
