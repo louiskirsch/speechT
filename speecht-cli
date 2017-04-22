@@ -127,6 +127,9 @@ class CLI:
   def parsed(self):
     parsed = self.parser.parse_args()
 
+    if not parsed.command:
+      return parsed
+
     if parsed.command == 'train':
       parsed.run_type = 'train'
     elif parsed.command == 'evaluate':
@@ -135,7 +138,6 @@ class CLI:
       parsed.run_type = 'record'
     else:
       parsed.run_type = 'other'
-      return parsed
 
     parsed.run_train_dir = parsed.train_dir + '/' + parsed.run_name
 
