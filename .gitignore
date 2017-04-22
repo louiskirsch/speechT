@@ -94,4 +94,4 @@ ENV/
 # Created files by program
 /data/
 /train/
-/logs/
+/log/

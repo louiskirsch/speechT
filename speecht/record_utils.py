@@ -87,8 +87,8 @@ class AudioRecorder:
     it without getting chopped off.
     """
     stream = self._pyaudio.open(format=self.format, channels=1, rate=self.rate,
-                    input=True, output=True,
-                    frames_per_buffer=self.chunk_size)
+                                input=True, output=True,
+                                frames_per_buffer=self.chunk_size)
 
     num_silent = 0
     snd_started = False

@@ -18,6 +18,7 @@ import tensorflow as tf
 from speecht.evaluation import Evaluation
 from speecht.speech_input import SingleInputLoader
 from speecht.speech_model import create_default_model
+import speecht.vocabulary
 
 from speecht import preprocessing
 
@@ -35,12 +36,12 @@ class Recording:
     speech_input_loader = SingleInputLoader(self.flags.input_size)
 
     sample_rate = 16000
-    recorder = AudioRecorder(rate=sample_rate)
+    recorder = AudioRecorder(rate=sample_rate, chunk_size=4 * 1024)
 
     with tf.Session() as sess:
 
       model = create_default_model(self.flags, self.flags.input_size, speech_input_loader)
-      model.restore(sess, self.flags.run_data_dir)
+      model.restore(sess, self.flags.run_train_dir)
 
       while True:
         print('Recording audio')
@@ -64,6 +65,6 @@ class Recording:
         decoded_ids_paths = [Evaluation.extract_decoded_ids(path) for path in decoded]
         for decoded_path in decoded_ids_paths:
           decoded_ids = next(decoded_path)
-          decoded_str = vocabulary.ids_to_sentence(decoded_ids)
+          decoded_str = speecht.vocabulary.ids_to_sentence(decoded_ids)
           print('decoded: {}'.format(decoded_str))
 
