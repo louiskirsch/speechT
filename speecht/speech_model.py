@@ -89,9 +89,9 @@ class SpeechModel:
       language_model: the file path to the language model to use for beam search decoding or None
     """
     with tf.name_scope('decoding'):
-      self.lm_weight = tf.placeholder_with_default(1.0, shape=(), name='language_model_weight')
+      self.lm_weight = tf.placeholder_with_default(0.8, shape=(), name='language_model_weight')
       self.word_count_weight = tf.placeholder_with_default(0.0, shape=(), name='word_count_weight')
-      self.valid_word_count_weight = tf.placeholder_with_default(0.0, shape=(), name='valid_word_count_weight')
+      self.valid_word_count_weight = tf.placeholder_with_default(2.3, shape=(), name='valid_word_count_weight')
 
       if language_model:
         self.softmaxed = tf.log(tf.nn.softmax(self.logits, name='softmax') + 1e-8) / math.log(10)
