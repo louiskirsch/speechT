@@ -199,10 +199,12 @@ class InputBatchLoader(BaseInputLoader):
       if self.epochs_left is not None:
         self.epochs_left -= 1
         if self.epochs_left == 0:
-          sess.run(self.queue.close())
+          break
 
       if coord.should_stop():
         break
+
+    sess.run(self.queue.close())
 
   def start_threads(self, sess, coord, n_threads=1):
     """ Start background threads to feed queue """
