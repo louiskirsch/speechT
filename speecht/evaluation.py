@@ -99,12 +99,12 @@ class Evaluation(DatasetExecutor):
           should_save = self.flags.should_save and epoch == 0
           self.run_epoch(model, sess, stats, should_save)
 
-        self.print_global_statistics(stats)
-
       except tf.errors.OutOfRangeError:
         print('Done evaluating -- epoch limit reached')
       finally:
         coord.request_stop()
+
+      self.print_global_statistics(stats)
 
       coord.join()
 
