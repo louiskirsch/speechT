@@ -77,6 +77,12 @@ class CLI:
                              'Specify a directory containing `kenlm-model.binary`, '
                              '`vocabulary` and `trie`. '
                              'Language model must be binary format with probing hash table.')
+    parser.add_argument('--lm-weight', dest='lm_weight', type=float, default=0.8,
+                        help='The weight multiplied with the language model score')
+    parser.add_argument('--word-count-weight', dest='word_count_weight', type=float, default=0.0,
+                        help='The weight added for each word')
+    parser.add_argument('--valid-word-count-weight', dest='valid_word_count_weight', type=float, default=2.3,
+                        help='The weight added for each in vocabulary word')
 
   def _add_evaluation_parser(self):
     evaluation_parser = self.subparsers.add_parser('evaluate', help='Evaluate the development or test set.',
