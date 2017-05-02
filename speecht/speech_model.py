@@ -307,6 +307,9 @@ def create_default_model(flags, input_size: int, speech_input: BaseInputLoader) 
                            max_gradient_norm=flags.max_gradient_norm,
                            momentum=flags.momentum)
     model.add_decoding_ops()
+  elif flags.command == 'export':
+    model.add_training_ops()
+    model.add_decoding_ops()
   else:
     model.add_training_ops()
     model.add_decoding_ops(language_model=flags.language_model,

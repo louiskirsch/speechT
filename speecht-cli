@@ -32,6 +32,7 @@ class CLI:
     self._add_recording_parser()
     self._add_parameter_search_parser()
     self._add_preprocess_parser()
+    self._add_export_parser()
 
   def _create_base_parser(self):
     base_parser = argparse.ArgumentParser(add_help=False)
@@ -51,6 +52,14 @@ class CLI:
                              help='Log directory to log the runs in.')
     base_parser.set_defaults(feature_type='power')
     return base_parser
+
+  def _add_export_parser(self):
+    export_parser = self.subparsers.add_parser('export', help='Export network details',
+                                                 parents=[self.base_parser])
+    export_parser.add_argument('--weights', dest='export_weights_dir', type=str,
+                               help='Store the weights in numpy arrays')
+    export_parser.add_argument('--input-size', dest='input_size', type=int, default=128,
+                               help='The input size of each sample, depending on what preprocessing was used')
 
   def _add_training_parser(self):
     training_parser = self.subparsers.add_parser('train', help='Train the wav2letter weights.',
@@ -174,6 +183,11 @@ class CLI:
     import speecht.preprocessing
     return speecht.preprocessing.Preprocessing(flags)
 
+  @staticmethod
+  def _get_export_executor(flags):
+    import speecht.exporting
+    return speecht.exporting.Exporting(flags)
+
   @lazy
   def command_executor(self):
     return {
@@ -181,7 +195,8 @@ class CLI:
       'evaluate': self._get_evaluation_executor,
       'record': self._get_recording_executor,
       'search': self._get_search_executor,
-      'preprocess': self._get_preprocessing_executor
+      'preprocess': self._get_preprocessing_executor,
+      'export': self._get_export_executor
     }[self.parsed.command](self.parsed)
 
   def run(self):
