@@ -64,7 +64,7 @@ class CLI:
   def _add_training_parser(self):
     training_parser = self.subparsers.add_parser('train', help='Train the wav2letter weights.',
                                                  parents=[self.base_parser])
-    training_parser.add_argument('--learning-rate', dest='learning_rate', type=float, default=1e-3,
+    training_parser.add_argument('--learning-rate', dest='learning_rate', type=float, default=1e-4,
                                  help='The initial learning rate.')
     training_parser.add_argument('--reset-learning-rate', dest='reset_learning_rate', action='store_true',
                                  help='Reset the learning rate to the default or provided value.')
