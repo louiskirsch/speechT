@@ -21,6 +21,7 @@ import speecht.vocabulary
 from speecht.execution import DatasetExecutor
 
 from speecht.speech_model import SpeechModel
+import itertools
 
 
 class EvalStatistics:
@@ -73,10 +74,12 @@ class Evaluation(DatasetExecutor):
                                     feature_type=self.flags.feature_type)
 
   def get_loader_limit_count(self):
-    return self.flags.epoch_count * self.flags.batch_size
+    return self.flags.step_count * self.flags.batch_size
 
-  def get_max_epochs(self):
-    return self.flags.epoch_count
+  def get_max_steps(self):
+    if self.flags.step_count:
+      return self.flags.step_count
+    return None
 
   def run(self):
 
@@ -92,15 +95,19 @@ class Evaluation(DatasetExecutor):
       try:
         print('Begin evaluation')
 
-        for epoch in range(self.flags.epoch_count):
+        if self.flags.step_count:
+          step_iter = range(self.flags.step_count)
+        else:
+          step_iter = itertools.count()
+        for step in step_iter:
           if coord.should_stop():
             break
 
-          should_save = self.flags.should_save and epoch == 0
-          self.run_epoch(model, sess, stats, should_save)
+          should_save = self.flags.should_save and step == 0
+          self.run_step(model, sess, stats, should_save)
 
       except tf.errors.OutOfRangeError:
-        print('Done evaluating -- epoch limit reached')
+        print('Done evaluating -- step limit reached')
       finally:
         coord.request_stop()
 
@@ -116,8 +123,8 @@ class Evaluation(DatasetExecutor):
                                                            stats.global_word_edit_distance,
                                                            stats.global_word_error_rate))
 
-  def run_epoch(self, model: SpeechModel, sess: tf.Session, stats: EvalStatistics,
-                save: bool, verbose=True, feed_dict: Dict=None):
+  def run_step(self, model: SpeechModel, sess: tf.Session, stats: EvalStatistics,
+               save: bool, verbose=True, feed_dict: Dict=None):
     global_step = model.global_step.eval()
 
     # Validate on data set and write summary

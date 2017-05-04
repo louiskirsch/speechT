@@ -45,14 +45,14 @@ tensorboard --logdir log/
 
 ## Testing
 
-To evaluate on the test set for one batch run
+To evaluate on the whole test set run
 ```
 speecht-cli evaluate
 ```
 
-To evaluate on the whole test set use
+To evaluate on a single batch
 ```
-speecht-cli evaluate --epoch-count 1000
+speecht-cli evaluate --step-count 1
 ```
 
 By default greedy decoding is used.

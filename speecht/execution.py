@@ -35,12 +35,12 @@ class DatasetExecutor(metaclass=ABCMeta):
     print('Initialize InputBatchLoader')
     self.speech_input = InputBatchLoader(self.input_size, self.flags.batch_size,
                                          partial(self.create_sample_generator, self.get_loader_limit_count()),
-                                         self.get_max_epochs())
+                                         self.get_max_steps())
 
   def determine_input_size(self):
     return next(self.create_sample_generator(limit_count=1))[0].shape[1]
 
-  def get_max_epochs(self):
+  def get_max_steps(self):
     return None
 
   @abstractmethod

@@ -102,8 +102,8 @@ class CLI:
                                    help='Use the test dataset.')
     evaluation_parser.add_argument('--no-save', dest='should_save', action='store_false',
                                    help='Do not save evaluation')
-    evaluation_parser.add_argument('--epoch-count', dest='epoch_count', type=int, default=1,
-                                   help='Number of epochs to evaluate')
+    evaluation_parser.add_argument('--step-count', dest='step_count', type=int, default=0,
+                                   help='Number of steps to evaluate')
     self._add_language_model_argument(evaluation_parser)
     evaluation_parser.set_defaults(dataset='test')
 

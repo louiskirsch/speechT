@@ -132,12 +132,12 @@ class InputBatchLoader(BaseInputLoader):
   This class manages the the background threads needed to fill a queue full of data.
   """
 
-  def __init__(self, input_size, batch_size, data_generator_creator, max_epochs=None):
+  def __init__(self, input_size, batch_size, data_generator_creator, max_steps=None):
 
     super().__init__(input_size)
     self.batch_size = batch_size
     self.data_generator_creator = data_generator_creator
-    self.epochs_left = max_epochs
+    self.steps_left = max_steps
 
     with tf.device("/cpu:0"):
       # Define input and label placeholders
@@ -196,9 +196,9 @@ class InputBatchLoader(BaseInputLoader):
         self.labels: labels
       })
 
-      if self.epochs_left is not None:
-        self.epochs_left -= 1
-        if self.epochs_left == 0:
+      if self.steps_left is not None:
+        self.steps_left -= 1
+        if self.steps_left == 0:
           break
 
       if coord.should_stop():

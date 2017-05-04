@@ -69,7 +69,7 @@ class Training(DatasetExecutor):
           if is_checkpoint_step:
             global_step = model.global_step.eval()
 
-            # Print statistics for the previous epoch.
+            # Print statistics for the previous step.
             perplexity = np.exp(float(avg_loss)) if avg_loss < 300 else float("inf")
             print("global step {:d} learning rate {:.4f} step-time {:.2f} average loss {:.2f} perplexity {:.2f}"
                   .format(global_step, model.learning_rate.eval(), step_time, avg_loss, perplexity))
@@ -90,7 +90,7 @@ class Training(DatasetExecutor):
             step_time, loss = 0.0, 0.0
 
       except tf.errors.OutOfRangeError:
-        print('Done training -- epoch limit reached')
+        print('Done training -- step limit reached')
       finally:
         # When done, ask the threads to stop.
         coord.request_stop()

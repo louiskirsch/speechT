@@ -82,14 +82,14 @@ class LanguageModelParameterSearch(Evaluation):
       model.word_count_weight: candidate.word_count_weight,
       model.valid_word_count_weight: candidate.valid_word_count_weight
     }
-    self.run_epoch(model, sess, stats, save=False, verbose=False, feed_dict=feed_dict)
+    self.run_step(model, sess, stats, save=False, verbose=False, feed_dict=feed_dict)
     score = -(stats.global_letter_error_rate + stats.global_word_error_rate)
     candidate.update_score(score, stats)
 
   def get_loader_limit_count(self):
     return 0
 
-  def get_max_epochs(self):
+  def get_max_steps(self):
     return None
 
   def run(self):
