@@ -205,6 +205,10 @@ class SpeechCorpusReader:
 
     return directory
 
+  @classmethod
+  def _preprocessing_error_callback(cls, error: Exception):
+    raise RuntimeError('An error occurred during preprocessing') from error
+
   def store_samples(self, directory, preprocess_fnc):
     """
     Read audio files from `directory` and store the preprocessed version in preprocessed/`directory`
@@ -230,7 +234,8 @@ class SpeechCorpusReader:
         audio_id = self._extract_audio_id(audio_file)
         transcript_entry = transcript_dict[audio_id]
         transform_args = (audio_file, preprocess_fnc, transcript_entry, out_directory)
-        pool.apply_async(SpeechCorpusReader._transform_and_store_sample, transform_args)
+        pool.apply_async(SpeechCorpusReader._transform_and_store_sample, transform_args,
+                         error_callback=self._preprocessing_error_callback)
 
       pool.close()
       pool.join()
