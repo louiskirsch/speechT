@@ -87,6 +87,7 @@ speecht-cli evaluate --run-name best_run
 ## Using a language model
 
 If you'd like to use KenLM as a language model for decoding you need to compile and install [tensorflow-with-kenlm](https://github.com/timediv/tensorflow-with-kenlm).
+If you only require the CPU version of tensorflow for linux you can also download it [here](https://github.com/timediv/tensorflow-with-kenlm/releases/download/v1.1/tensorflow-1.1.0-cp35-cp35m-linux_x86_64.whl) instead.
 
 Download all the necessary files from [here](https://github.com/timediv/speechT/releases/download/v1.0/kenlm-english.tgz), then
 ```commandline
