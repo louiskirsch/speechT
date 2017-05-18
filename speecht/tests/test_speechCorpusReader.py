@@ -10,7 +10,7 @@ from speecht.preprocessing import SpeechCorpusReader
 
 class TestSpeechCorpusReader(TestCase):
 
-  BASE_DIR = 'tests/data/'
+  BASE_DIR = 'speecht/tests/data/'
   TEST_FILES_DIR = 'train'
   PREPROCESS_DIR = 'tests/data/preprocessed'
   SAMPLE_FILE = BASE_DIR + TEST_FILES_DIR + '/1089-134686-0037.flac'
@@ -42,7 +42,7 @@ class TestSpeechCorpusReader(TestCase):
     audio_id, audio_fragments = transformed
 
     self.assertEqual(audio_id, '1089-134686-0037')
-    self.assertEqual(audio_fragments.shape, (114881,))
+    self.assertEqual(audio_fragments.shape, (83360,))
 
   def test_generate_samples(self):
     samples = list(self.reader.generate_samples(self.TEST_FILES_DIR, lambda x, y: x))
