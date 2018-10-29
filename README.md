@@ -10,7 +10,7 @@ Python3, portaudio19-dev and ffmpeg are required.
 
 On Ubuntu install via
 ```
-sudo apt install python3-pip portaudio19-dev ffmpeg
+sudo apt Install python3-pip portaudio19-dev ffmpeg
 ```
 
 ### Install via pip3
